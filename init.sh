@@ -25,9 +25,20 @@ done
 CONFIG="${CONFIG:-lab.yaml}"
 
 if [[ ! -f "$CONFIG" ]]; then
-    echo "Error: $CONFIG not found. Create a lab.yaml in your project root." >&2
-    echo "See examples at: $SCRIPT_DIR/examples/" >&2
-    exit 1
+    if [[ -t 0 && "$DRY_RUN" == false ]]; then
+        # Interactive terminal — offer to generate lab.yaml
+        echo "No $CONFIG found. Starting interactive setup..."
+        echo ""
+        python3 "$SCRIPT_DIR/lib/interactive.py" "$CONFIG"
+        if [[ ! -f "$CONFIG" ]]; then
+            exit 1
+        fi
+    else
+        echo "Error: $CONFIG not found. Create a lab.yaml in your project root." >&2
+        echo "  Run interactively:  autoresearch init" >&2
+        echo "  Or copy an example: autoresearch examples copy test-speed" >&2
+        exit 1
+    fi
 fi
 
 # Check for Python

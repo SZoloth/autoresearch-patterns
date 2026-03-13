@@ -14,36 +14,41 @@ You define what to optimize. `init.sh` generates a self-contained `program.md` t
 
 No daemon. No runner process. The agent IS the loop.
 
+## Install
+
+```bash
+curl -sL https://raw.githubusercontent.com/samzoloth/autoresearch-patterns/main/install.sh | bash
+```
+
+This clones the repo to `~/.autoresearch` and symlinks `autoresearch` to `/usr/local/bin`.
+
+<details>
+<summary>Manual install</summary>
+
+```bash
+git clone https://github.com/samzoloth/autoresearch-patterns ~/tools/autoresearch
+ln -sf ~/tools/autoresearch/bin/autoresearch /usr/local/bin/autoresearch
+```
+
+</details>
+
 ## Quick start
 
 ```bash
-# 1. Clone this repo somewhere
-git clone https://github.com/samzoloth/autoresearch-patterns ~/tools/autoresearch
-
-# 2. In your project, create a lab.yaml
 cd my-project
-cat > lab.yaml << 'EOF'
-name: optimize-test-speed
-metric:
-  name: duration_seconds
-  unit: seconds
-  direction: lower
-eval: |
-  START=$(date +%s%N)
-  pnpm test --run 2>&1
-  END=$(date +%s%N)
-  echo "METRIC duration_seconds=$(( (END - START) / 1000000000 ))"
-mutable:
-  - src/
-EOF
 
-# 3. Initialize
-~/tools/autoresearch/init.sh
+# Option A: interactive setup (no config file needed)
+autoresearch init
 
-# 4. Start any agent
+# Option B: copy an example and customize
+autoresearch examples copy test-speed
+vim lab.yaml
+autoresearch init
+
+# Start any agent
 claude "Read program.md and follow the instructions exactly."
 
-# 5. Go to sleep. Wake up to results.
+# Go to sleep. Wake up to results.
 cat results.tsv
 ```
 
@@ -129,9 +134,9 @@ Pre-built configs in `examples/`:
 Copy one and customize:
 
 ```bash
-cp ~/tools/autoresearch/examples/test-speed.yaml lab.yaml
+autoresearch examples copy test-speed
 vim lab.yaml
-~/tools/autoresearch/init.sh
+autoresearch init
 ```
 
 ## The loop

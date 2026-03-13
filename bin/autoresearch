@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Resolve real path through symlinks
+SELF="$0"
+[[ -L "$SELF" ]] && SELF="$(readlink "$SELF")"
+AUTORESEARCH_HOME="$(cd "$(dirname "$SELF")/.." && pwd)"
+
+usage() {
+    echo "Usage: autoresearch <command> [options]"
+    echo ""
+    echo "Commands:"
+    echo "  init [--dry-run] [lab.yaml]   Initialize an autoresearch session"
+    echo "  examples                       List available example configs"
+    echo "  examples copy <name>           Copy an example to ./lab.yaml"
+    echo "  help                           Show this help"
+    echo ""
+    echo "Run 'autoresearch init' in a git repo to get started."
+    echo "If no lab.yaml exists, interactive setup will guide you."
+}
+
+case "${1:-help}" in
+    init)
+        shift
+        exec "$AUTORESEARCH_HOME/init.sh" "$@"
+        ;;
+    examples)
+        shift || true
+        if [[ "${1:-}" == "copy" ]]; then
+            NAME="${2:-}"
+            if [[ -z "$NAME" ]]; then
+                echo "Usage: autoresearch examples copy <name>" >&2
+                echo "Run 'autoresearch examples' to see available configs." >&2
+                exit 1
+            fi
+            [[ "$NAME" != *.yaml ]] && NAME="${NAME}.yaml"
+            SRC="$AUTORESEARCH_HOME/examples/$NAME"
+            if [[ ! -f "$SRC" ]]; then
+                echo "Error: example '$NAME' not found." >&2
+                echo "Available:" >&2
+                ls -1 "$AUTORESEARCH_HOME/examples/" >&2
+                exit 1
+            fi
+            cp "$SRC" ./lab.yaml
+            echo "Copied $NAME to ./lab.yaml — edit it, then run 'autoresearch init'"
+        else
+            echo "Available example configs:"
+            echo ""
+            for f in "$AUTORESEARCH_HOME/examples/"*.yaml; do
+                name=$(basename "$f" .yaml)
+                desc=$(grep '^description:' "$f" | head -1 | cut -d: -f2- | xargs)
+                printf "  %-25s %s\n" "$name" "${desc:-(no description)}"
+            done
+            echo ""
+            echo "Copy one: autoresearch examples copy <name>"
+        fi
+        ;;
+    help|--help|-h)
+        usage
+        ;;
+    *)
+        echo "Unknown command: $1" >&2
+        echo ""
+        usage >&2
+        exit 1
+        ;;
+esac

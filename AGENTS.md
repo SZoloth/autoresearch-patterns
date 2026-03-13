@@ -14,9 +14,12 @@ lab.yaml → init.sh → (parse_config.py + render.py) → program.md + benchmar
 
 ## Structure
 
-- `init.sh` — entry point, orchestrates config parsing and template rendering
+- `bin/autoresearch` — CLI dispatcher (symlinked to PATH by install.sh)
+- `install.sh` — curl-installable installer (clones repo + symlinks)
+- `init.sh` — core orchestrator: parse config → render templates → create branch → commit
 - `lib/parse_config.py` — parses lab.yaml (stdlib only, tries PyYAML then falls back to simple parser)
 - `lib/render.py` — renders templates with `{{var}}` substitution, `{{#each}}`, `{{#if}}`
+- `lib/interactive.py` — interactive questionnaire, generates lab.yaml from user answers
 - `templates/` — Handlebars-style templates for generated files
 - `examples/` — pre-built lab.yaml configs for common optimization targets
 - `reference/` — original source files from karpathy/autoresearch and pi-autoresearch
