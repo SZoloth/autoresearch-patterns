@@ -1,0 +1,29 @@
+name: optimize-test-speed
+description: Reduce vitest test suite execution time
+
+metric:
+  name: duration_seconds
+  unit: seconds
+  direction: lower
+
+eval: |
+  START=$(date +%s%N)
+  pnpm test --run 2>&1
+  END=$(date +%s%N)
+  DURATION=$(( (END - START) / 1000000000 ))
+  echo "METRIC duration_seconds=$DURATION"
+
+mutable:
+  - vitest.config.ts
+  - src/
+
+immutable:
+  - src/**/*.test.ts
+  - package.json
+
+constraints:
+  - All tests must pass (exit code 0)
+  - No new dependencies
+  - No removing or skipping tests
+
+timeout: 300

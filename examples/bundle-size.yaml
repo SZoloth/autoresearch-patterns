@@ -1,0 +1,27 @@
+name: reduce-bundle-size
+description: Minimize production JavaScript bundle size
+
+metric:
+  name: bundle_kb
+  unit: KB
+  direction: lower
+
+eval: |
+  pnpm build 2>&1
+  SIZE=$(du -sk dist/ | cut -f1)
+  echo "METRIC bundle_kb=$SIZE"
+
+mutable:
+  - src/
+  - vite.config.ts
+
+immutable:
+  - src/**/*.test.ts
+  - package.json
+
+constraints:
+  - App must build without errors
+  - All features must still work (no removing functionality)
+  - No new dependencies
+
+timeout: 120

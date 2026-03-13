@@ -1,0 +1,24 @@
+name: optimize-prompt
+description: Improve LLM prompt quality measured by eval script
+
+metric:
+  name: eval_score
+  unit: points
+  direction: higher
+
+eval: |
+  python3 eval_prompt.py 2>&1
+
+mutable:
+  - prompt.txt
+  - system_prompt.txt
+
+immutable:
+  - eval_prompt.py
+
+constraints:
+  - Prompt must remain under 4000 tokens
+  - No changing the eval script
+  - Output must be valid JSON
+
+timeout: 120

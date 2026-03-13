@@ -1,0 +1,26 @@
+name: improve-lighthouse
+description: Maximize Lighthouse performance score
+
+metric:
+  name: perf_score
+  unit: points
+  direction: higher
+
+eval: |
+  lighthouse http://localhost:3000 --output=json --quiet --chrome-flags="--headless" 2>/dev/null | \
+    python3 -c "import sys,json; r=json.load(sys.stdin); print(f'METRIC perf_score={r[\"categories\"][\"performance\"][\"score\"]*100:.0f}')"
+
+mutable:
+  - src/
+  - public/
+
+immutable:
+  - src/**/*.test.ts
+  - package.json
+
+constraints:
+  - App must render correctly
+  - No removing visible content
+  - Dev server must be running on localhost:3000
+
+timeout: 120

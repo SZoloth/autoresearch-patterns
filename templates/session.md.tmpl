@@ -1,0 +1,41 @@
+# Autoresearch: {{name}}
+
+## Objective
+
+{{description}}
+
+Optimize **{{metric.name}}** ({{metric.unit}}, {{metric.direction}} is better).
+
+## Metrics
+
+- **Primary**: {{metric.name}} ({{metric.unit}}, {{metric.direction}} is better)
+
+## How to run
+
+```bash
+./benchmark.sh > run.log 2>&1
+grep "^METRIC" run.log
+```
+
+## Files in scope
+{{#each mutable}}
+- {{.}}
+{{/each}}
+
+## Off limits
+{{#if immutable}}
+{{#each immutable}}
+- {{.}}
+{{/each}}
+{{/if}}
+- `benchmark.sh`
+- `program.md`
+
+## Constraints
+{{#each constraints}}
+- {{.}}
+{{/each}}
+
+## What's been tried
+
+_No experiments yet. Baseline pending._

@@ -1,0 +1,11 @@
+# Generated session files (created in user's project by init.sh)
+# These are NOT ignored in this repo — only in user projects that clone this.
+# Users should add these to their own .gitignore if desired.
+
+# Python
+__pycache__/
+*.pyc
+
+# Autoresearch runtime
+run.log
+.autoresearch_output

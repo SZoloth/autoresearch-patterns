@@ -1,0 +1,112 @@
+# Autoresearch: {{name}}
+
+{{description}}
+
+## Objective
+
+Optimize **{{metric.name}}** ({{metric.unit}}, {{metric.direction}} is better) by iteratively modifying the files in scope. Each experiment is a single change, measured by `./benchmark.sh`, kept or discarded based on the metric.
+
+## How to run an experiment
+
+```bash
+./benchmark.sh > run.log 2>&1
+```
+
+The script outputs `METRIC {{metric.name}}=<number>` on success. Extract it:
+
+```bash
+grep "^METRIC" run.log
+```
+
+If grep returns nothing, the run crashed. Read the last 50 lines of `run.log` for the error.
+
+## Files you may modify
+{{#each mutable}}
+- {{.}}
+{{/each}}
+
+## Files you must NOT modify
+{{#if immutable}}
+{{#each immutable}}
+- {{.}}
+{{/each}}
+{{/if}}
+- `benchmark.sh` — the eval harness is fixed
+- `program.md` — these instructions are fixed
+- `results.tsv` — append only, never rewrite
+
+## Constraints
+{{#each constraints}}
+- {{.}}
+{{/each}}
+
+## Session files
+
+| File | Purpose |
+|------|---------|
+| `program.md` | These instructions (read-only) |
+| `benchmark.sh` | Eval harness (read-only) |
+| `autoresearch.md` | Living session document — update as you go |
+| `results.tsv` | Tab-separated experiment log — append each result |
+| `autoresearch.ideas.md` | Ideas backlog — save promising deferred ideas |
+
+## The experiment loop
+
+**LOOP FOREVER. Never ask "should I continue?" — the user expects autonomous work.**
+
+### Resuming a session
+
+If `autoresearch.md` exists and `results.tsv` has data rows, you are resuming. Read both files plus `git log --oneline` to understand what has been tried. Continue from where the previous session left off. If `autoresearch.ideas.md` exists, use it as inspiration.
+
+### Loop steps
+
+1. **Read state** — check `autoresearch.md`, `results.tsv`, and `git log --oneline` for context.
+2. **Pick an idea** — choose an experiment. Think about what the metric actually measures and what would move it. Prefer ideas grounded in understanding over random variations.
+3. **Modify files** — make a single, focused change to the mutable files.
+4. **Commit** — `git add <changed files> && git commit -m "experiment: <short description>"`
+5. **Run** — `./benchmark.sh > run.log 2>&1`
+6. **Read results** — `grep "^METRIC" run.log`
+7. **Decide:**
+   - **Improved** ({{metric.direction}} {{metric.name}}) → **keep**. Log to `results.tsv` with status `keep`.
+   - **Equal or worse** → **discard**. Log to `results.tsv` with status `discard`. Then `git reset HEAD~1 --hard` to remove the failed commit.
+   - **Crashed** → log with status `crash` and metric value `0`. If the bug is trivial (typo, missing import), fix and retry. Otherwise, `git reset HEAD~1 --hard` and move on.
+8. **Update autoresearch.md** — note what you tried, what happened, and any insights.
+9. **Repeat** — go to step 2. Never stop.
+
+### Results format
+
+`results.tsv` is tab-separated with these columns:
+
+```
+commit	{{metric.name}}	status	description
+```
+
+- `commit`: short git hash (7 chars)
+- `{{metric.name}}`: the metric value (use `0` for crashes)
+- `status`: `keep`, `discard`, or `crash`
+- `description`: short text describing the experiment
+
+### Simplicity criterion
+
+All else being equal, simpler is better:
+- Removing code for equal or better performance → **keep** (simplification win)
+- Tiny improvement that adds ugly complexity → probably **discard**
+- Same performance but cleaner code → **keep**
+
+### Ideas backlog
+
+When you discover promising but complex ideas you won't pursue now, append them to `autoresearch.ideas.md`. When you're stuck, read the backlog for inspiration. Prune ideas that have been tried or are clearly bad.
+
+### When stuck
+
+Don't thrash on the same approach. If you've reverted the same idea twice, try something structurally different. Re-read the source files. Think about what the system is actually doing. The best improvements come from deep understanding, not random search.
+
+### Crashes and errors
+
+- Trivial bugs (typo, wrong variable name, missing import): fix and retry
+- Fundamental failures (approach doesn't work): log as crash, revert, move on
+- Don't invest more than 2-3 attempts fixing a single crash
+
+## NEVER STOP
+
+The user may be asleep. The user may be away for hours. Keep running experiments until manually interrupted. If you run out of ideas, think harder — re-read the code, study the metric, try combining previous near-misses, try more radical changes. The loop runs until the human stops you.

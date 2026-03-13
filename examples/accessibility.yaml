@@ -1,0 +1,31 @@
+name: fix-accessibility
+description: Reduce axe-core accessibility violations to zero
+
+metric:
+  name: violations
+  unit: count
+  direction: lower
+
+eval: |
+  npx axe http://localhost:3000 --exit 2>/dev/null | \
+    python3 -c "
+import sys, re
+text = sys.stdin.read()
+m = re.search(r'(\d+) violation', text)
+count = int(m.group(1)) if m else 0
+print(f'METRIC violations={count}')
+"
+
+mutable:
+  - src/
+
+immutable:
+  - src/**/*.test.ts
+  - package.json
+
+constraints:
+  - App must render correctly
+  - No removing visible content
+  - Dev server must be running on localhost:3000
+
+timeout: 120

@@ -1,0 +1,30 @@
+name: optimize-build-speed
+description: Reduce production build time
+
+metric:
+  name: build_seconds
+  unit: seconds
+  direction: lower
+
+eval: |
+  START=$(date +%s%N)
+  pnpm build 2>&1
+  END=$(date +%s%N)
+  DURATION=$(( (END - START) / 1000000000 ))
+  echo "METRIC build_seconds=$DURATION"
+
+mutable:
+  - vite.config.ts
+  - tsconfig.json
+  - src/
+
+immutable:
+  - src/**/*.test.ts
+  - package.json
+
+constraints:
+  - Build must succeed without errors
+  - Output must be functionally identical
+  - No new dependencies
+
+timeout: 300

@@ -1,83 +1,173 @@
 # autoresearch-patterns
 
-Exploring the autoresearch loop as a generalizable pattern for recursive self-improvement toward any goal.
+Scientific method in a box. Clone this repo, write a config, and let any AI agent run overnight experiments on your codebase.
 
-## Origin
+Based on [karpathy/autoresearch](https://github.com/karpathy/autoresearch) and [davebcn87/pi-autoresearch](https://github.com/davebcn87/pi-autoresearch).
 
-[karpathy/autoresearch](https://github.com/karpathy/autoresearch) — an autonomous AI agent that iteratively improves an LLM training script overnight. The agent modifies code, trains for 5 minutes, evaluates, keeps or discards, and repeats ~100 times while you sleep.
+## How it works
 
-[davebcn87/pi-autoresearch](https://github.com/davebcn87/pi-autoresearch) — a Pi agent adaptation that abstracts the pattern into domain-agnostic infrastructure: any command, any metric, any optimization target. Shows the path from LLM-specific to universal.
+```
+lab.yaml → init.sh → program.md → Agent reads it → Loop runs forever
+```
 
-## The core abstraction
+You define what to optimize. `init.sh` generates a self-contained `program.md` that any agent (Claude, Cursor, Codex, Pi) can follow autonomously. The agent modifies code, measures the result, keeps improvements, discards regressions, and repeats until you stop it.
 
-Three invariants that generalize beyond LLM training:
+No daemon. No runner process. The agent IS the loop.
 
-1. **Immutable evaluation** — a fixed, trusted metric the agent can't game
-2. **Mutable artifact** — a single surface the agent modifies (code, config, prose, design)
-3. **Deterministic keep/discard** — improvement advances state; regression rolls back
+## Quick start
 
-The human's job shifts from doing the work to **programming the program** — writing the instructions that define the agent's search space, constraints, and judgment criteria.
+```bash
+# 1. Clone this repo somewhere
+git clone https://github.com/samzoloth/autoresearch-patterns ~/tools/autoresearch
 
-## Two implementations, one pattern
+# 2. In your project, create a lab.yaml
+cd my-project
+cat > lab.yaml << 'EOF'
+name: optimize-test-speed
+metric:
+  name: duration_seconds
+  unit: seconds
+  direction: lower
+eval: |
+  START=$(date +%s%N)
+  pnpm test --run 2>&1
+  END=$(date +%s%N)
+  echo "METRIC duration_seconds=$(( (END - START) / 1000000000 ))"
+mutable:
+  - src/
+EOF
 
-| | Karpathy (original) | Pi adaptation |
-|---|---|---|
-| **Agent** | Claude/Codex (any) | Pi specifically |
-| **Domain** | LLM pretraining | Any (test speed, bundle size, Lighthouse, etc.) |
-| **Artifact** | train.py | Any file(s) in scope |
-| **Metric** | val_bpb | Any numeric metric |
-| **State** | Git branches + results.tsv | Git branches + autoresearch.jsonl |
-| **Instructions** | program.md (static) | SKILL.md + autoresearch.md (living document) |
-| **Loop control** | Agent reads program.md once | Extension injects rules into every turn |
-| **Persistence** | TSV (append) | JSONL (append + config headers) |
-| **Session resume** | Read results.tsv + git log | Read autoresearch.md + jsonl (survives context resets) |
-| **User interaction** | None (async overnight) | Queued steers delivered after log_experiment |
-| **Observability** | grep run.log | Live widget + dashboard (Ctrl+X) |
-| **Ideas backlog** | None | autoresearch.ideas.md for deferred experiments |
+# 3. Initialize
+~/tools/autoresearch/init.sh
 
-### What pi-autoresearch adds
+# 4. Start any agent
+claude "Read program.md and follow the instructions exactly."
 
-The key architectural insight: separate **infrastructure** (extension: run/log/display) from **domain knowledge** (skill: what to optimize, how). This means one extension serves unlimited domains.
+# 5. Go to sleep. Wake up to results.
+cat results.tsv
+```
 
-It also solves practical problems the original doesn't address:
-- **Context resets** — autoresearch.md is a living document that lets a fresh agent resume with full context
-- **User steering** — messages queued during runs, delivered after log, no interruption
-- **Ideas backlog** — promising but complex ideas written to autoresearch.ideas.md so they aren't lost
-- **Benchmark script** — autoresearch.sh with pre-checks and METRIC output format standardizes evaluation
+## Configuration
 
-## Applying to domains
+`lab.yaml` is the only file you write. Minimal example:
 
-| Domain | Artifact | Metric | Eval time | Feasibility |
-|--------|----------|--------|-----------|-------------|
-| LLM pretraining | train.py | val_bpb ↓ | 5 min | Proven |
-| Test speed | test configs, code | seconds ↓ | seconds-minutes | High |
-| Bundle size | components, imports | KB ↓ | seconds | High |
-| Lighthouse/CWV | components, styles | perf score ↑ | 30-60s | High |
-| Build speed | configs, code | seconds ↓ | seconds-minutes | High |
-| Accessibility | components | axe violations ↓ | seconds | High |
-| Type coverage | source files | % covered ↑ | seconds | Medium |
-| Prompt engineering | prompt text | eval score ↑ | variable | Medium |
-| Writing quality | prose | readability score ↑ | seconds | Experimental |
-| Design iteration | CSS/components | composite score | needs human eval | Hard |
+```yaml
+name: my-experiment
+metric:
+  name: duration_seconds
+  unit: seconds
+  direction: lower       # lower | higher
+eval: pnpm test 2>&1
+mutable:
+  - src/
+```
 
-## Open questions
+Full options:
 
-- How do you define "val_bpb" for subjective domains (writing quality, design taste)?
-- Can you chain multiple loops (one for perf, one for a11y, one for bundle size)?
-- What's the minimum eval cycle time that makes overnight runs worthwhile?
-- How do you handle multi-objective optimization where metrics trade off?
-- What happens when the agent exhausts easy wins — change program.md or the search space?
-- How do you prevent the agent from gaming the metric (Goodhart's law)?
-- What's the right granularity for the mutable artifact — one file? multiple files? a directory?
+```yaml
+name: optimize-test-speed
+description: Reduce vitest test suite execution time
 
-## Structure
+metric:
+  name: duration_seconds
+  unit: seconds
+  direction: lower
 
-- reference/ — original source files from both repos for study
-- explorations/ — domain-specific experiments and write-ups  
-- programs/ — program.md variants for different domains
+eval: pnpm test 2>&1     # command that produces METRIC output
 
-## References
+mutable:                  # files the agent may change
+  - vitest.config.ts
+  - src/
 
-- [Original autoresearch repo](https://github.com/karpathy/autoresearch)
-- [Pi autoresearch adaptation](https://github.com/davebcn87/pi-autoresearch)
-- [Karpathy tweet thread](https://x.com/karpathy/status/2029701092347630069)
+immutable:                # files the agent must not touch
+  - src/**/*.test.ts
+  - package.json
+
+constraints:              # rules the agent must follow
+  - All tests must pass (exit code 0)
+  - No new dependencies
+  - No removing or skipping tests
+
+timeout: 300              # seconds per experiment (default: 300)
+```
+
+## What init.sh generates
+
+| File | Purpose |
+|------|---------|
+| `program.md` | Complete agent instructions — the agent reads this one file and knows everything |
+| `benchmark.sh` | Eval harness wrapping your eval command, outputs `METRIC name=value` |
+| `autoresearch.md` | Living session document — objective, files in scope, what's been tried |
+| `results.tsv` | Experiment log (header row only at init) |
+| `autoresearch.ideas.md` | Ideas backlog for deferred experiments |
+
+It also creates a git branch `autoresearch/<name>-<date>` and commits all generated files.
+
+## Eval command
+
+Your eval command must output a line in this format:
+
+```
+METRIC metric_name=number
+```
+
+The benchmark harness wraps your command with a timeout and passes through METRIC lines. If your eval command doesn't output METRIC lines, add an echo at the end.
+
+## Examples
+
+Pre-built configs in `examples/`:
+
+| Config | Metric | Direction | Use case |
+|--------|--------|-----------|----------|
+| `test-speed.yaml` | duration_seconds | lower | Reduce test suite time |
+| `bundle-size.yaml` | bundle_kb | lower | Minimize JS bundle |
+| `lighthouse.yaml` | perf_score | higher | Improve Lighthouse score |
+| `build-speed.yaml` | build_seconds | lower | Speed up production build |
+| `accessibility.yaml` | violations | lower | Fix a11y issues |
+| `prompt-engineering.yaml` | eval_score | higher | Optimize LLM prompts |
+
+Copy one and customize:
+
+```bash
+cp ~/tools/autoresearch/examples/test-speed.yaml lab.yaml
+vim lab.yaml
+~/tools/autoresearch/init.sh
+```
+
+## The loop
+
+Once started, the agent follows this cycle indefinitely:
+
+1. Pick an experiment idea
+2. Modify files in scope
+3. Commit the change
+4. Run `./benchmark.sh`
+5. If improved → keep the commit
+6. If worse → `git reset HEAD~1 --hard`
+7. Log to `results.tsv`, update `autoresearch.md`
+8. Repeat forever
+
+The agent never asks "should I continue?" — it runs until interrupted.
+
+## Session resume
+
+Stop the agent anytime. Start a new one later:
+
+```bash
+claude "Read program.md and follow the instructions exactly."
+```
+
+The new agent reads `autoresearch.md`, `results.tsv`, and `git log` to understand what's been tried, then continues from where the last session left off.
+
+## Requirements
+
+- Python 3 (stdlib only, no pip install needed)
+- Git
+- Whatever your eval command needs (pnpm, node, lighthouse, etc.)
+
+## Reference
+
+The `reference/` directory contains the original source files from both repos for study:
+
+- [karpathy/autoresearch](https://github.com/karpathy/autoresearch) — the original LLM training optimizer
+- [davebcn87/pi-autoresearch](https://github.com/davebcn87/pi-autoresearch) — the domain-agnostic Pi adaptation
