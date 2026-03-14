@@ -3,6 +3,7 @@
 
 Supports simple conditionals:
   {{#if var}}...content...{{/if}}
+  {{#unless var}}...content...{{/unless}}
   {{#each var}}...{{.}}...{{/each}}
 
 Stdlib only — no pip dependencies.
@@ -21,8 +22,9 @@ def render(template, config):
     # Process {{#each key}}...{{.}}...{{/each}} blocks
     result = _process_each(result, config)
 
-    # Process {{#if key}}...{{/if}} blocks
+    # Process {{#if key}}...{{/if}} and {{#unless key}}...{{/unless}} blocks
     result = _process_if(result, config)
+    result = _process_unless(result, config)
 
     # Replace {{var.subvar}} dot-notation
     def replace_dotvar(match):
@@ -85,6 +87,21 @@ def _process_if(template, config):
         body = match.group(2)
         val = config.get(key, None)
         if val and (not isinstance(val, list) or len(val) > 0):
+            return body.strip("\n")
+        return ""
+
+    return re.sub(pattern, replace, template, flags=re.DOTALL)
+
+
+def _process_unless(template, config):
+    """Process {{#unless key}}...{{/unless}} blocks (inverse of #if)."""
+    pattern = r"\{\{#unless\s+(\w+)\}\}(.*?)\{\{/unless\}\}"
+
+    def replace(match):
+        key = match.group(1)
+        body = match.group(2)
+        val = config.get(key, None)
+        if not val or (isinstance(val, list) and len(val) == 0):
             return body.strip("\n")
         return ""
 

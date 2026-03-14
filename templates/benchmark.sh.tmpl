@@ -7,6 +7,24 @@ set -euo pipefail
 
 TIMEOUT={{timeout}}
 
+{{#if has_extractor}}
+# Metric extraction handled automatically ({{metric.extract}})
+if ! timeout "${TIMEOUT}s" bash -c '
+{{extraction_block}}
+' > .autoresearch_output 2>&1; then
+    echo "EVAL FAILED (exit code $? or timeout)" >&2
+    cat .autoresearch_output >&2
+    rm -f .autoresearch_output
+    exit 1
+fi
+
+OUTPUT=$(cat .autoresearch_output)
+rm -f .autoresearch_output
+
+echo "$OUTPUT" | grep -v "^METRIC " || true
+echo "$OUTPUT" | grep "^METRIC "
+{{/if}}
+{{#unless has_extractor}}
 # Run the eval command
 if ! timeout "${TIMEOUT}s" bash -c '{{eval}}' > .autoresearch_output 2>&1; then
     echo "EVAL FAILED (exit code $? or timeout)" >&2
@@ -28,3 +46,4 @@ else
     echo "$OUTPUT" | tail -5 >&2
     exit 1
 fi
+{{/unless}}

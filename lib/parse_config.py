@@ -15,6 +15,151 @@ DEFAULTS = {
 
 REQUIRED = ["name", "metric", "eval", "mutable"]
 
+VALID_EXTRACTORS = {"duration", "file-size", "regexp"}
+VALID_RIGOR = {"light", "standard", "strict"}
+
+# ── Scientist prompt blocks by rigor level ──────────────────────────────
+
+SCIENTIST_LIGHT = """\
+## Experiment discipline
+
+- Log every experiment in `results.tsv` immediately after running it.
+- Maintain `autoresearch.ideas.md` as a prioritized list of what to try next.
+- When you discover a promising idea you won't pursue immediately, add it to the backlog with a one-line rationale.
+- When an idea has been tried or is clearly bad, remove it from the backlog."""
+
+SCIENTIST_STANDARD = """\
+## Scientific method
+
+You are a scientist running controlled experiments. Rigor matters more than speed.
+
+### Before each experiment
+
+Write a hypothesis in `autoresearch.md` before making any changes:
+
+```
+### Experiment N: <short title>
+**Hypothesis:** <what you expect to change and why>
+**Variable:** <the single thing you're changing>
+**Expected effect:** <predicted direction and rough magnitude>
+```
+
+### One variable at a time
+
+Change exactly one thing per experiment. If you want to try two ideas, run them as two separate experiments. Combining changes makes it impossible to know what worked. If you catch yourself changing multiple things, stop and split the experiment.
+
+### After each experiment
+
+Complete the entry in `autoresearch.md`:
+
+```
+**Result:** <metric value>
+**Vs hypothesis:** <confirmed / partially confirmed / refuted>
+**Interpretation:** <why did this happen? what did you learn?>
+```
+
+If the result surprises you, spend a moment understanding why before moving on. Surprises are where the best insights live.
+
+### Ideas backlog
+
+Maintain `autoresearch.ideas.md` as a prioritized list:
+
+```
+1. <idea> — expected impact: <high/medium/low> — rationale: <why this might work>
+2. ...
+```
+
+Re-prioritize after each experiment based on what you learned. Remove ideas that have been tried. Add new ideas that emerge from results.
+
+### Diminishing returns
+
+After 3+ consecutive experiments with <2% improvement each, note this in `autoresearch.md` and consider:
+- Are you optimizing the right thing?
+- Is there a structural change that would unlock a bigger gain?
+- Has this metric reached a practical floor/ceiling?
+
+Shift strategy before grinding out marginal gains."""
+
+SCIENTIST_STRICT = SCIENTIST_STANDARD + """
+
+### Statistical confidence
+
+Measurements have variance. A single run proving "improvement" might be noise.
+
+- **Baseline**: Run the benchmark 3 times before any changes. Record all 3 values. Your baseline is the median.
+- **Confirmation**: When an experiment shows improvement, run the benchmark 2 more times. Keep only if the median of 3 runs beats the baseline median.
+- **Variance tracking**: If your 3 baseline runs vary by more than 10%, note this in `autoresearch.md`. High-variance metrics need more runs to establish significance.
+
+### Control experiments
+
+Every 5th experiment, run a control: revert to the last known-good state and re-run the benchmark. If the control doesn't reproduce the expected value (within baseline variance), something has drifted. Investigate before continuing.
+
+### Lab notebook standard
+
+Each experiment entry in `autoresearch.md` must include:
+
+```
+### Experiment N: <title>
+**Hypothesis:** <prediction and reasoning>
+**Variable:** <exactly what changed>
+**Expected effect:** <direction, magnitude>
+**Baseline (median of 3):** <value>
+**Result (median of 3):** <value>
+**Delta:** <% change>
+**Vs hypothesis:** <confirmed / partially confirmed / refuted>
+**Confidence:** <high — consistent across runs / medium — some variance / low — within noise>
+**Interpretation:** <what you learned, implications for next experiments>
+```
+
+Do not skip fields. Incomplete entries undermine the entire log."""
+
+
+def _build_extraction_block(metric):
+    """Generate a bash block that extracts the METRIC line from eval output.
+
+    When metric.extract is set, the eval command's output doesn't need to
+    include a METRIC line — the extraction block handles it.
+    Returns an empty string if no extractor is configured.
+    """
+    extract = metric.get("extract", "")
+    if not extract:
+        return ""
+
+    name = metric["name"]
+    parts = extract.split(None, 1)
+    extractor = parts[0]
+    arg = parts[1] if len(parts) > 1 else ""
+
+    if extractor == "duration":
+        # macOS-portable timing using python3 (date +%s%N doesn't work on macOS)
+        return (
+            '_AR_START=$(python3 -c "import time; print(int(time.time()))")\n'
+            '{eval_cmd}\n'
+            '_AR_END=$(python3 -c "import time; print(int(time.time()))")\n'
+            f'echo "METRIC {name}=$(( _AR_END - _AR_START ))"'
+        )
+    elif extractor == "file-size":
+        if not arg:
+            print("Error: file-size extractor requires a path argument, e.g. 'file-size dist/'", file=sys.stderr)
+            sys.exit(1)
+        return (
+            '{eval_cmd}\n'
+            f'echo "METRIC {name}=$(du -sk {arg} | cut -f1)"'
+        )
+    elif extractor == "regexp":
+        if not arg:
+            print("Error: regexp extractor requires a pattern argument", file=sys.stderr)
+            sys.exit(1)
+        # The pattern should have a capture group for the numeric value
+        return (
+            '{eval_cmd}\n'
+            f'_AR_VAL=$(cat .autoresearch_output | python3 -c "import sys,re; m=re.search(r\'{arg}\', sys.stdin.read()); print(m.group(1) if m else \'\')")\n'
+            f'echo "METRIC {name}=$_AR_VAL"'
+        )
+    else:
+        print(f"Error: unknown extractor '{extractor}'. Valid: {', '.join(sorted(VALID_EXTRACTORS))}", file=sys.stderr)
+        sys.exit(1)
+
 
 def parse_yaml_simple(text):
     """Minimal YAML parser for flat and simple nested structures.
@@ -166,10 +311,42 @@ def parse_config(path):
     if "unit" not in metric:
         metric["unit"] = ""
 
+    # Validate extract field if present
+    extract = metric.get("extract", "")
+    if extract:
+        extractor = extract.split(None, 1)[0]
+        if extractor not in VALID_EXTRACTORS:
+            print(f"Error: unknown metric.extract '{extractor}'. Valid: {', '.join(sorted(VALID_EXTRACTORS))}", file=sys.stderr)
+            sys.exit(1)
+
     # Ensure lists
     for key in ("mutable", "immutable", "constraints"):
         if isinstance(config.get(key), str):
             config[key] = [config[key]]
+
+    # Validate and generate scientist_block from rigor level
+    rigor = config.get("rigor", "standard")
+    if rigor not in VALID_RIGOR:
+        print(f"Error: rigor must be one of {', '.join(sorted(VALID_RIGOR))}, got '{rigor}'", file=sys.stderr)
+        sys.exit(1)
+    config["rigor"] = rigor
+
+    RIGOR_BLOCKS = {
+        "light": SCIENTIST_LIGHT,
+        "standard": SCIENTIST_STANDARD,
+        "strict": SCIENTIST_STRICT,
+    }
+    config["scientist_block"] = RIGOR_BLOCKS[rigor]
+
+    # Generate extraction_block
+    extraction_block = _build_extraction_block(metric)
+    if extraction_block:
+        # Substitute {eval_cmd} with the actual eval command
+        config["extraction_block"] = extraction_block.replace("{eval_cmd}", config["eval"].rstrip())
+        config["has_extractor"] = True
+    else:
+        config["extraction_block"] = ""
+        config["has_extractor"] = False
 
     return config
 

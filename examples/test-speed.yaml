@@ -5,13 +5,9 @@ metric:
   name: duration_seconds
   unit: seconds
   direction: lower
+  extract: duration
 
-eval: |
-  START=$(date +%s%N)
-  pnpm test --run 2>&1
-  END=$(date +%s%N)
-  DURATION=$(( (END - START) / 1000000000 ))
-  echo "METRIC duration_seconds=$DURATION"
+eval: pnpm test --run 2>&1
 
 mutable:
   - vitest.config.ts

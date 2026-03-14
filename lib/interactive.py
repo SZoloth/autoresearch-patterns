@@ -64,12 +64,38 @@ def main():
     metric_dir = prompt_choice("   Lower or higher is better?", ["lower", "higher"])
 
     print()
-    print("   Your eval command must output: METRIC %s=<number>" % metric_name)
-    print("   Example:")
-    print('     pnpm test 2>&1 && echo "METRIC %s=$(some_value)"' % metric_name)
+    print("   How should the metric be extracted?")
+    print("     1) duration    — auto-time the eval command (seconds)")
+    print("     2) file-size   — measure a file/directory size (KB)")
+    print("     3) regexp      — capture a number from output")
+    print("     4) manual      — I'll output METRIC %s=<value> myself" % metric_name)
     print()
-    eval_cmd = prompt("   Eval command",
-                      hint="Shell command that runs + outputs the METRIC line")
+    extractor_choice = ""
+    while extractor_choice not in ("1", "2", "3", "4"):
+        extractor_choice = input("   Choice [1-4]: ").strip()
+
+    extract_value = ""
+    if extractor_choice == "1":
+        extract_value = "duration"
+    elif extractor_choice == "2":
+        extract_path = prompt("   Path to measure", hint="e.g. dist/, build/output.js")
+        extract_value = f"file-size {extract_path}"
+    elif extractor_choice == "3":
+        extract_pattern = prompt("   Regex pattern",
+                                 hint="Must have a capture group, e.g. (\\d+) violations")
+        extract_value = f"regexp {extract_pattern}"
+
+    print()
+    if extract_value:
+        eval_cmd = prompt("   Eval command",
+                          hint="Shell command to run (metric extraction is automatic)")
+    else:
+        print("   Your eval command must output: METRIC %s=<number>" % metric_name)
+        print("   Example:")
+        print('     pnpm test 2>&1 && echo "METRIC %s=$(some_value)"' % metric_name)
+        print()
+        eval_cmd = prompt("   Eval command",
+                          hint="Shell command that runs + outputs the METRIC line")
 
     # Q3: Mutable files
     print()
@@ -86,6 +112,18 @@ def main():
     constraints = prompt_multi("   Constraints",
                                hint="Rules the agent must follow, e.g. 'All tests must pass'")
 
+    # Q5: Rigor level
+    print()
+    print("5. How much scientific rigor?")
+    print("     1) light    — log results, maintain ideas backlog")
+    print("     2) standard — hypothesize, one-variable, structured analysis (recommended)")
+    print("     3) strict   — repeat runs for confidence, control experiments")
+    print()
+    rigor_choice = ""
+    while rigor_choice not in ("1", "2", "3"):
+        rigor_choice = input("   Choice [1-3, default 2]: ").strip() or "2"
+    rigor = {"1": "light", "2": "standard", "3": "strict"}[rigor_choice]
+
     # Build YAML
     lines = [f"name: {name}"]
     if description:
@@ -96,6 +134,8 @@ def main():
     if metric_unit:
         lines.append(f"  unit: {metric_unit}")
     lines.append(f"  direction: {metric_dir}")
+    if extract_value:
+        lines.append(f"  extract: {extract_value}")
     lines.append("")
     lines.append("eval: |")
     for eval_line in eval_cmd.split("\n"):
@@ -110,6 +150,9 @@ def main():
         for c in constraints:
             lines.append(f"  - {c}")
     lines.append("")
+    if rigor != "standard":
+        lines.append(f"rigor: {rigor}")
+        lines.append("")
 
     yaml_content = "\n".join(lines)
 

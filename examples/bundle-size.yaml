@@ -5,11 +5,9 @@ metric:
   name: bundle_kb
   unit: KB
   direction: lower
+  extract: file-size dist/
 
-eval: |
-  pnpm build 2>&1
-  SIZE=$(du -sk dist/ | cut -f1)
-  echo "METRIC bundle_kb=$SIZE"
+eval: pnpm build 2>&1
 
 mutable:
   - src/

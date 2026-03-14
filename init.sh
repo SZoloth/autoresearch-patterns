@@ -70,23 +70,31 @@ if [[ -z "$CONFIG_JSON" ]]; then
     exit 1
 fi
 
-# Extract values
-NAME=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; print(json.load(sys.stdin)['name'])")
-METRIC_NAME=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; print(json.load(sys.stdin)['metric']['name'])")
-METRIC_DIR=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; print(json.load(sys.stdin)['metric']['direction'])")
+# Extract all values in a single python3 invocation
+eval "$(echo "$CONFIG_JSON" | python3 -c "
+import sys, json, shlex
+c = json.load(sys.stdin)
+m = c['metric']
+print(f'NAME={shlex.quote(c[\"name\"])}')
+print(f'METRIC_NAME={shlex.quote(m[\"name\"])}')
+print(f'METRIC_DIR={shlex.quote(m[\"direction\"])}')
+print(f'METRIC_UNIT={shlex.quote(m.get(\"unit\", \"\"))}')
+print(f'RIGOR={shlex.quote(c.get(\"rigor\", \"standard\"))}')
+print(f'HAS_EXTRACTOR={shlex.quote(str(c.get(\"has_extractor\", False)))}')
+print(f'EVAL_CMD={shlex.quote(c[\"eval\"])}')
+")"
 DATE=$(date +%Y%m%d)
 BRANCH="autoresearch/${NAME}-${DATE}"
-
-# Check that eval command includes METRIC output
-EVAL_CMD=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; print(json.load(sys.stdin)['eval'])")
-if ! echo "$EVAL_CMD" | grep -q "METRIC "; then
+if [[ "$HAS_EXTRACTOR" != "True" ]] && ! echo "$EVAL_CMD" | grep -q "METRIC "; then
     echo ""
     echo "Warning: your eval command does not appear to output a METRIC line." >&2
     echo "benchmark.sh expects output like: METRIC ${METRIC_NAME}=<number>" >&2
-    echo "Add an echo to the end of your eval block, e.g.:" >&2
-    echo "  eval: |" >&2
-    echo "    your-command 2>&1" >&2
-    echo "    echo \"METRIC ${METRIC_NAME}=\$(parse result here)\"" >&2
+    echo "Add an echo to the end of your eval block, or use metric.extract:" >&2
+    echo "  metric:" >&2
+    echo "    name: ${METRIC_NAME}" >&2
+    echo "    extract: duration          # auto-times your command" >&2
+    echo "    extract: file-size dist/   # measures directory size" >&2
+    echo "    extract: regexp '(\\d+)'   # captures from output" >&2
     echo "" >&2
     if [[ "$DRY_RUN" == true ]]; then
         exit 1
@@ -102,6 +110,7 @@ if [[ "$DRY_RUN" == true ]]; then
     echo "Config valid. Would generate:"
     echo "  Branch:     $BRANCH"
     echo "  Metric:     $METRIC_NAME ($METRIC_DIR is better)"
+    echo "  Rigor:      $RIGOR"
     echo "  Files:"
     echo "    program.md          — agent instructions"
     echo "    benchmark.sh        — eval harness"
@@ -145,17 +154,24 @@ fi
 git add program.md benchmark.sh autoresearch.md results.tsv autoresearch.ideas.md
 git commit -m "autoresearch: initialize ${NAME} session"
 
-echo ""
-echo "Session initialized. Generated files:"
-echo "  program.md          — agent instructions"
-echo "  benchmark.sh        — eval harness"
-echo "  autoresearch.md     — living session document"
-echo "  results.tsv         — experiment log"
-echo "  autoresearch.ideas.md — ideas backlog"
-echo ""
-echo "Branch: $BRANCH"
-echo ""
-echo "Start an agent:"
-echo '  claude "Read program.md and follow the instructions exactly."'
-echo '  cursor   # open program.md, tell the agent to follow it'
-echo '  codex    # same approach — any agent works'
+# Styled banner
+python3 -c "
+import sys; sys.path.insert(0, '$SCRIPT_DIR/lib')
+from tui import banner, BOLD_WHITE, DIM, RESET
+print(banner('$NAME', '$METRIC_NAME', '$METRIC_DIR', '$METRIC_UNIT'))
+print(f'  {DIM}Branch{RESET}    $BRANCH')
+print(f'  {DIM}Rigor{RESET}     $RIGOR')
+print(f'  {DIM}Files{RESET}     program.md, benchmark.sh, autoresearch.md, results.tsv')
+print()
+print(f'  {DIM}Next steps:{RESET}')
+print(f'    {BOLD_WHITE}autoresearch test{RESET}    verify your benchmark works')
+print(f'    {BOLD_WHITE}autoresearch start{RESET}   launch an agent to optimize')
+print()
+" 2>/dev/null || {
+    # Fallback
+    echo ""
+    echo "Session initialized: $NAME"
+    echo "Branch: $BRANCH"
+    echo ""
+    echo "Next: autoresearch test, then autoresearch start"
+}

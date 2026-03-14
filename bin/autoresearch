@@ -11,9 +11,12 @@ usage() {
     echo ""
     echo "Commands:"
     echo "  init [--dry-run] [lab.yaml]   Initialize an autoresearch session"
-    echo "  examples                       List available example configs"
-    echo "  examples copy <name>           Copy an example to ./lab.yaml"
-    echo "  help                           Show this help"
+    echo "  test                          Run benchmark.sh once and show result"
+    echo "  start [--agent <name>]        Launch an agent to optimize"
+    echo "  status                        Show session summary and results"
+    echo "  examples                      List available example configs"
+    echo "  examples copy <name>          Copy an example to ./lab.yaml"
+    echo "  help                          Show this help"
     echo ""
     echo "Run 'autoresearch init' in a git repo to get started."
     echo "If no lab.yaml exists, interactive setup will guide you."
@@ -23,6 +26,138 @@ case "${1:-help}" in
     init)
         shift
         exec "$AUTORESEARCH_HOME/init.sh" "$@"
+        ;;
+    test)
+        if [[ ! -f benchmark.sh ]]; then
+            echo "Error: benchmark.sh not found. Run 'autoresearch init' first." >&2
+            exit 1
+        fi
+
+        echo "Running benchmark..."
+        echo ""
+
+        OUTPUT=$(bash benchmark.sh 2>&1) || {
+            echo "$OUTPUT"
+            echo ""
+            echo "Benchmark failed. Check your eval command." >&2
+            exit 1
+        }
+
+        # Extract METRIC lines
+        METRIC_LINE=$(echo "$OUTPUT" | grep "^METRIC " | tail -1 || true)
+        NON_METRIC=$(echo "$OUTPUT" | grep -v "^METRIC " || true)
+
+        if [[ -n "$NON_METRIC" ]]; then
+            echo "$NON_METRIC"
+            echo ""
+        fi
+
+        if [[ -z "$METRIC_LINE" ]]; then
+            echo "No METRIC line found in output." >&2
+            exit 1
+        fi
+
+        # Parse METRIC name=value
+        METRIC_PAIR="${METRIC_LINE#METRIC }"
+        METRIC_KEY="${METRIC_PAIR%%=*}"
+        METRIC_VAL="${METRIC_PAIR#*=}"
+
+        # Use Python TUI for formatted output with comparison
+        python3 -c "
+import sys; sys.path.insert(0, '$AUTORESEARCH_HOME/lib')
+from tui import format_test_result, BOLD_WHITE, DIM, RESET
+from status import read_results, extract_best_and_baseline
+
+metric_key = '$METRIC_KEY'
+metric_val = '$METRIC_VAL'
+unit = ''
+direction = 'lower'
+best = None
+baseline = None
+
+try:
+    from parse_config import parse_config
+    c = parse_config('lab.yaml')
+    unit = c['metric'].get('unit', '')
+    direction = c['metric'].get('direction', 'lower')
+except Exception:
+    pass
+
+results = read_results('results.tsv')
+if results:
+    best, baseline = extract_best_and_baseline(results, metric_key, direction)
+
+print(format_test_result(metric_key, metric_val, unit, direction, best, baseline))
+print()
+if best is None:
+    print(f'  {DIM}Baseline recorded.{RESET} Run {BOLD_WHITE}autoresearch start{RESET} to begin optimization.')
+else:
+    print(f'  Run {BOLD_WHITE}autoresearch status{RESET} for full results.')
+print()
+" 2>/dev/null || {
+            # Fallback if python fails
+            echo "  Result: ${METRIC_KEY} = ${METRIC_VAL}"
+            echo ""
+            echo "Setup verified. Run 'autoresearch start' to begin optimization."
+        }
+        ;;
+    start)
+        shift || true
+        AGENT=""
+
+        # Parse --agent flag
+        while [[ $# -gt 0 ]]; do
+            case "$1" in
+                --agent) AGENT="$2"; shift 2 ;;
+                *) echo "Unknown option: $1" >&2; exit 1 ;;
+            esac
+        done
+
+        if [[ ! -f program.md ]]; then
+            echo "Error: program.md not found. Run 'autoresearch init' first." >&2
+            exit 1
+        fi
+
+        PROMPT='Read program.md and follow the instructions exactly.'
+
+        # Auto-detect agent if not specified
+        if [[ -z "$AGENT" ]]; then
+            if command -v claude &>/dev/null; then
+                AGENT="claude"
+            elif command -v codex &>/dev/null; then
+                AGENT="codex"
+            fi
+        fi
+
+        case "${AGENT}" in
+            claude)
+                echo "Launching Claude Code..."
+                exec claude "$PROMPT"
+                ;;
+            codex)
+                echo "Launching Codex..."
+                exec codex "$PROMPT"
+                ;;
+            "")
+                echo "No supported agent found (checked: claude, codex)."
+                echo ""
+                echo "Start manually with any agent:"
+                echo "  claude \"$PROMPT\""
+                echo "  codex  \"$PROMPT\""
+                echo "  cursor  # open program.md and tell the agent to follow it"
+                ;;
+            *)
+                echo "Unknown agent: $AGENT" >&2
+                echo "Supported: claude, codex" >&2
+                echo ""
+                echo "Or start manually:"
+                echo "  $AGENT \"$PROMPT\""
+                exit 1
+                ;;
+        esac
+        ;;
+    status)
+        exec python3 "$AUTORESEARCH_HOME/lib/status.py" "${2:-lab.yaml}"
         ;;
     examples)
         shift || true

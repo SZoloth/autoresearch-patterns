@@ -1,5 +1,7 @@
 # Autoresearch: {{name}}
 
+> If it can be measured, it can be improved.
+
 {{description}}
 
 ## Objective
@@ -50,6 +52,8 @@ If grep returns nothing, the run crashed. Read the last 50 lines of `run.log` fo
 | `results.tsv` | Tab-separated experiment log — append each result |
 | `autoresearch.ideas.md` | Ideas backlog — save promising deferred ideas |
 
+{{scientist_block}}
+
 ## The experiment loop
 
 **LOOP FOREVER. Never ask "should I continue?" — the user expects autonomous work.**
@@ -61,7 +65,7 @@ If `autoresearch.md` exists and `results.tsv` has data rows, you are resuming. R
 ### Loop steps
 
 1. **Read state** — check `autoresearch.md`, `results.tsv`, and `git log --oneline` for context.
-2. **Pick an idea** — choose an experiment. Think about what the metric actually measures and what would move it. Prefer ideas grounded in understanding over random variations.
+2. **Hypothesize** — before touching any code, write down what you expect to happen and why.
 3. **Modify files** — make a single, focused change to the mutable files.
 4. **Commit** — `git add <changed files> && git commit -m "experiment: <short description>"`
 5. **Run** — `./benchmark.sh > run.log 2>&1`
@@ -70,8 +74,9 @@ If `autoresearch.md` exists and `results.tsv` has data rows, you are resuming. R
    - **Improved** ({{metric.direction}} {{metric.name}}) → **keep**. Log to `results.tsv` with status `keep`.
    - **Equal or worse** → **discard**. Log to `results.tsv` with status `discard`. Then `git reset HEAD~1 --hard` to remove the failed commit.
    - **Crashed** → log with status `crash` and metric value `0`. If the bug is trivial (typo, missing import), fix and retry. Otherwise, `git reset HEAD~1 --hard` and move on.
-8. **Update autoresearch.md** — note what you tried, what happened, and any insights.
-9. **Repeat** — go to step 2. Never stop.
+8. **Analyze** — compare result to your hypothesis. Update `autoresearch.md` with what you learned.
+9. **Update backlog** — re-prioritize `autoresearch.ideas.md` based on new insights.
+10. **Repeat** — go to step 2. Never stop.
 
 ### Results format
 
@@ -92,10 +97,6 @@ All else being equal, simpler is better:
 - Removing code for equal or better performance → **keep** (simplification win)
 - Tiny improvement that adds ugly complexity → probably **discard**
 - Same performance but cleaner code → **keep**
-
-### Ideas backlog
-
-When you discover promising but complex ideas you won't pursue now, append them to `autoresearch.ideas.md`. When you're stuck, read the backlog for inspiration. Prune ideas that have been tried or are clearly bad.
 
 ### When stuck
 
