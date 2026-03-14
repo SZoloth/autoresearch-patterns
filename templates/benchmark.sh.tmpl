@@ -7,26 +7,23 @@ set -euo pipefail
 
 TIMEOUT={{timeout}}
 
+# Write eval command to a temp script to avoid quoting issues
+_AR_SCRIPT=$(mktemp)
+trap 'rm -f "$_AR_SCRIPT"' EXIT
+
 {{#if has_extractor}}
 # Metric extraction handled automatically ({{metric.extract}})
-if ! timeout "${TIMEOUT}s" bash -c '
+cat > "$_AR_SCRIPT" << '_AR_EVAL_EOF'
 {{extraction_block}}
-' > .autoresearch_output 2>&1; then
-    echo "EVAL FAILED (exit code $? or timeout)" >&2
-    cat .autoresearch_output >&2
-    rm -f .autoresearch_output
-    exit 1
-fi
-
-OUTPUT=$(cat .autoresearch_output)
-rm -f .autoresearch_output
-
-echo "$OUTPUT" | grep -v "^METRIC " || true
-echo "$OUTPUT" | grep "^METRIC "
+_AR_EVAL_EOF
 {{/if}}
 {{#unless has_extractor}}
-# Run the eval command
-if ! timeout "${TIMEOUT}s" bash -c '{{eval}}' > .autoresearch_output 2>&1; then
+cat > "$_AR_SCRIPT" << '_AR_EVAL_EOF'
+{{eval}}
+_AR_EVAL_EOF
+{{/unless}}
+
+if ! timeout "${TIMEOUT}s" bash "$_AR_SCRIPT" > .autoresearch_output 2>&1; then
     echo "EVAL FAILED (exit code $? or timeout)" >&2
     cat .autoresearch_output >&2
     rm -f .autoresearch_output
@@ -36,14 +33,15 @@ fi
 OUTPUT=$(cat .autoresearch_output)
 rm -f .autoresearch_output
 
-# Output non-METRIC lines as context, then METRIC lines exactly once.
+# Output non-METRIC lines as context, then METRIC lines.
 echo "$OUTPUT" | grep -v "^METRIC " || true
 
 if echo "$OUTPUT" | grep -q "^METRIC "; then
     echo "$OUTPUT" | grep "^METRIC "
 else
+{{#unless has_extractor}}
     echo "WARNING: No METRIC line found in output. Add 'echo METRIC {{metric.name}}=<value>' to your eval command." >&2
     echo "$OUTPUT" | tail -5 >&2
+{{/unless}}
     exit 1
 fi
-{{/unless}}

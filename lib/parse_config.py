@@ -214,8 +214,12 @@ def parse_yaml_simple(text):
         value = match.group(2).strip()
 
         if value == "|":
-            # Multi-line literal block — collect indented lines
+            # Multi-line literal block — collect lines until the next
+            # top-level YAML key (word: at indent 0). Lines at indent 0
+            # that don't match a key pattern are still part of the block
+            # (e.g. inline Python inside a shell heredoc).
             block_lines = []
+            block_indent = None
             i += 1
             while i < len(lines):
                 bline = lines[i]
@@ -224,11 +228,21 @@ def parse_yaml_simple(text):
                     i += 1
                     continue
                 bindent = len(bline) - len(bline.lstrip())
-                if bindent > 0:
-                    block_lines.append(bline.strip())
-                    i += 1
-                else:
+                # Detect block indent from first content line
+                if block_indent is None and bindent > 0:
+                    block_indent = bindent
+                # A line at indent 0 that looks like a YAML key ends the block
+                if bindent == 0 and re.match(r"^\w+:\s*", bline):
                     break
+                # Strip the block indent prefix, preserving relative indentation
+                if block_indent and bindent >= block_indent:
+                    block_lines.append(bline[block_indent:])
+                else:
+                    block_lines.append(bline.strip())
+                i += 1
+            # Remove trailing empty lines
+            while block_lines and block_lines[-1] == "":
+                block_lines.pop()
             result[key] = "\n".join(block_lines)
             current_key = key
             continue
