@@ -6,7 +6,7 @@ set -euo pipefail
 
 INSTALL_DIR="${AUTORESEARCH_HOME:-$HOME/.autoresearch}"
 BIN_DIR="/usr/local/bin"
-REPO_URL="https://github.com/samzoloth/autoresearch-patterns.git"
+REPO_URL="https://github.com/SZoloth/autoresearch-patterns.git"
 
 echo "Installing autoresearch to $INSTALL_DIR..."
 

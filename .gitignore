@@ -9,3 +9,6 @@ __pycache__/
 # Autoresearch runtime
 run.log
 .autoresearch_output
+
+# Claude Code local config
+.claude/

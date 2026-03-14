@@ -19,7 +19,7 @@ You write lab.yaml → autoresearch init → generates program.md → Agent foll
 ## Install
 
 ```bash
-curl -sL https://raw.githubusercontent.com/samzoloth/autoresearch-patterns/main/install.sh | bash
+curl -sL https://raw.githubusercontent.com/SZoloth/autoresearch-patterns/main/install.sh | bash
 ```
 
 This clones the repo to `~/.autoresearch` and puts `autoresearch` on your PATH.
@@ -28,7 +28,7 @@ This clones the repo to `~/.autoresearch` and puts `autoresearch` on your PATH.
 <summary>Manual install</summary>
 
 ```bash
-git clone https://github.com/samzoloth/autoresearch-patterns ~/tools/autoresearch
+git clone https://github.com/SZoloth/autoresearch-patterns ~/tools/autoresearch
 ln -sf ~/tools/autoresearch/bin/autoresearch /usr/local/bin/autoresearch
 ```
 
