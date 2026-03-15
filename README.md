@@ -351,6 +351,10 @@ checkpoint_interval: 0    # disable checkpoints entirely
 
 ## Changelog
 
+### 0.5.0
+
+- **Root-cause analysis** — the analyze step now requires agents to trace the causal mechanism behind each result, not just compare against the hypothesis. Includes explicit "Root cause" and "Learnings" fields with a concrete good-vs-bad example.
+
 ### 0.4.0
 
 - **Strategic checkpoints** — adaptive meta-optimization. Every N experiments, the agent analyzes hit rate, velocity, diversity, and crash rate to select a strategy (exploit, explore, ablate, combine, stabilize). Builds a running theory of the system.
