@@ -113,6 +113,77 @@ Each experiment entry in `autoresearch.md` must include:
 
 Do not skip fields. Incomplete entries undermine the entire log."""
 
+# ── Strategic checkpoint block ────────────────────────────────────────
+
+CHECKPOINT_BLOCK = """\
+## Strategic checkpoints
+
+Every {{checkpoint_interval}} experiments (count rows in `results.tsv` since your last strategic review), **pause the loop** and run the protocol below before your next hypothesis. This is mandatory, not optional.
+
+### 1. Compute meta-metrics
+
+Analyze the last {{checkpoint_interval}} rows of `results.tsv`:
+
+- **Hit rate** — what fraction were `keep`? (keeps ÷ total)
+- **Velocity** — compare the best metric value in this batch to the best in the batch before it. Is improvement accelerating, steady, or stalling?
+- **Diversity** — look at the `description` column. Are you varying your approach (different files, different strategies) or grinding the same angle?
+- **Crash rate** — what fraction were `crash`?
+
+### 2. Select a strategy
+
+Use the first matching rule:
+
+| Condition | Strategy | What it means |
+|-----------|----------|---------------|
+| Crash rate >40% | **Stabilize** | Too many failures. Simplify your changes, reduce complexity, fix foundations before trying anything ambitious. |
+| Hit rate >60% AND velocity positive | **Exploit** | You're in a productive vein. Keep refining the current approach with small, targeted changes. |
+| 3+ consecutive `keep` but velocity declining | **Ablate** | You're adding complexity for diminishing returns. Remove components one at a time to find what's actually needed. |
+| Multiple past `keep` experiments that haven't been combined | **Combine** | You have individual wins sitting in history. Try merging two or more previously successful changes. |
+| Hit rate <20% AND velocity flat or negative | **Explore** | Current approach is exhausted. Try something structurally different — a new algorithm, a different file, a fundamentally different strategy. |
+| None of the above | **Continue** | No strong signal. Pick the most promising idea from your backlog and proceed. |
+
+### 3. Extract meta-patterns
+
+Look across all of `results.tsv`, not just the last batch:
+
+- **File-level patterns** — which files appear most often in successful experiments? Which in crashes?
+- **Category patterns** — are certain types of changes (algorithmic, structural, parameter tuning) more productive than others?
+- **Plateau detection** — has the metric stopped improving? How many experiments since the last `keep`?
+- **Anomaly review** — any result that's surprisingly good or bad? Could it be measurement noise?
+
+### 4. Check measurement hygiene
+
+If recent results show high variance (similar changes producing very different numbers), suspect runtime noise rather than real signal:
+
+- Re-run the last `keep` experiment to confirm the improvement is real.
+- Be aware of JIT warmup, garbage collection pauses, and background processes.
+- If two measurements of the same code differ by more than 10%, note the variance in `autoresearch.md` and consider running multiple times before concluding.
+
+### 5. Update your theory
+
+Maintain a `## Current theory` section at the **top** of `autoresearch.md` (below the title). Update it at every checkpoint. This is your model of the system:
+
+- What you believe affects the metric
+- What you've tested and ruled out
+- What you haven't tested yet
+- Your prediction for the most promising next direction
+
+### 6. Write the review
+
+Add a section to `autoresearch.md`:
+
+```
+### Strategic review after experiment N
+**Hit rate:** X/{{checkpoint_interval}} keeps (Y%)
+**Velocity:** <improving / steady / declining>
+**Diversity:** <high / medium / low>
+**Crash rate:** Z%
+**Strategy for next batch:** <exploit / explore / ablate / combine / stabilize / continue>
+**Rationale:** <1-2 sentences on why>
+```
+
+Then resume the experiment loop with your chosen strategy guiding your next hypothesis."""
+
 
 def _build_extraction_block(metric):
     """Generate a bash block that extracts the METRIC line from eval output.
@@ -351,6 +422,20 @@ def parse_config(path):
         "strict": SCIENTIST_STRICT,
     }
     config["scientist_block"] = RIGOR_BLOCKS[rigor]
+
+    # Validate and generate checkpoint_block
+    checkpoint_interval = config.get("checkpoint_interval", 5)
+    if checkpoint_interval is False or checkpoint_interval == 0:
+        config["checkpoint_interval"] = 0
+        config["checkpoint_block"] = ""
+        config["has_checkpoint"] = False
+    else:
+        if not isinstance(checkpoint_interval, int) or checkpoint_interval < 1:
+            print(f"Error: checkpoint_interval must be a positive integer or 0/false to disable, got '{checkpoint_interval}'", file=sys.stderr)
+            sys.exit(1)
+        config["checkpoint_interval"] = checkpoint_interval
+        config["checkpoint_block"] = CHECKPOINT_BLOCK.replace("{{checkpoint_interval}}", str(checkpoint_interval))
+        config["has_checkpoint"] = True
 
     # Generate extraction_block
     extraction_block = _build_extraction_block(metric)

@@ -54,6 +54,10 @@ If grep returns nothing, the run crashed. Read the last 50 lines of `run.log` fo
 
 {{scientist_block}}
 
+{{#if has_checkpoint}}
+{{checkpoint_block}}
+{{/if}}
+
 ## The experiment loop
 
 **LOOP FOREVER. Never ask "should I continue?" — the user expects autonomous work.**
@@ -61,6 +65,10 @@ If grep returns nothing, the run crashed. Read the last 50 lines of `run.log` fo
 ### Resuming a session
 
 If `autoresearch.md` exists and `results.tsv` has data rows, you are resuming. Read both files plus `git log --oneline` to understand what has been tried. Continue from where the previous session left off. If `autoresearch.ideas.md` exists, use it as inspiration.
+{{#if has_checkpoint}}
+
+Before your first new experiment, run a strategic review (see above) to orient yourself. Write a "Session resume analysis" section in `autoresearch.md` with your findings.
+{{/if}}
 
 ### Loop steps
 
@@ -77,6 +85,9 @@ If `autoresearch.md` exists and `results.tsv` has data rows, you are resuming. R
 8. **Analyze** — compare result to your hypothesis. Update `autoresearch.md` with what you learned.
 9. **Update backlog** — re-prioritize `autoresearch.ideas.md` based on new insights.
 10. **Repeat** — go to step 2. Never stop.
+{{#if has_checkpoint}}
+11. **Strategic checkpoint** — every {{checkpoint_interval}} experiments, run a strategic review (see above) before your next hypothesis.
+{{/if}}
 
 ### Results format
 
