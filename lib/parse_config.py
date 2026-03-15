@@ -55,10 +55,13 @@ Complete the entry in `autoresearch.md`:
 ```
 **Result:** <metric value>
 **Vs hypothesis:** <confirmed / partially confirmed / refuted>
-**Interpretation:** <why did this happen? what did you learn?>
+**Root cause:** <what is the causal mechanism? why did this specific change produce this specific effect?>
+**Learnings:** <what does this tell you about the system that you didn't know before?>
 ```
 
-If the result surprises you, spend a moment understanding why before moving on. Surprises are where the best insights live.
+Don't just note whether your hypothesis was right — explain *why* the result happened. Trace the causal chain from your code change to the metric movement. "It got faster" is not analysis. "Removing the N+1 query eliminated 200ms of serial database calls per run" is.
+
+If the result surprises you, the root cause matters even more. Surprises mean your mental model of the system is wrong. Fix the model before running the next experiment.
 
 ### Ideas backlog
 

@@ -82,7 +82,7 @@ Before your first new experiment, run a strategic review (see above) to orient y
    - **Improved** ({{metric.direction}} {{metric.name}}) → **keep**. Log to `results.tsv` with status `keep`.
    - **Equal or worse** → **discard**. Log to `results.tsv` with status `discard`. Then `git reset HEAD~1 --hard` to remove the failed commit.
    - **Crashed** → log with status `crash` and metric value `0`. If the bug is trivial (typo, missing import), fix and retry. Otherwise, `git reset HEAD~1 --hard` and move on.
-8. **Analyze** — compare result to your hypothesis. Update `autoresearch.md` with what you learned.
+8. **Analyze** — explain the root cause: what causal mechanism produced this result? Update `autoresearch.md` with the mechanism and what it reveals about the system.
 9. **Update backlog** — re-prioritize `autoresearch.ideas.md` based on new insights.
 10. **Repeat** — go to step 2. Never stop.
 {{#if has_checkpoint}}

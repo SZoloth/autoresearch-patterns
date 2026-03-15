@@ -247,12 +247,12 @@ rigor: standard   # light | standard | strict
 | Level | What the agent does |
 |-------|-------------------|
 | **light** | Log results, maintain ideas backlog |
-| **standard** | Hypothesize before each experiment, change one variable at a time, analyze results against hypothesis, detect diminishing returns |
+| **standard** | Hypothesize before each experiment, change one variable at a time, root-cause analysis after each result, detect diminishing returns |
 | **strict** | All of standard + run baseline 3x for variance, confirmation runs on improvements, control experiments every 5th run, full lab notebook entries |
 
 **light** is for quick-and-dirty optimization where you just want the agent grinding.
 
-**standard** is the sweet spot — the agent writes a hypothesis before each change, explains why results matched or didn't, and re-prioritizes ideas based on what it learned. This catches the common failure mode where agents make random changes without understanding why.
+**standard** is the sweet spot — the agent writes a hypothesis before each change, does root-cause analysis after each result (tracing the causal mechanism, not just noting pass/fail), and re-prioritizes ideas based on what it learned. This catches the common failure mode where agents make random changes without understanding why.
 
 **strict** is for noisy metrics or when you need confidence in results. The agent establishes statistical baselines, confirms improvements with repeat runs, and periodically runs control experiments to catch drift.
 
@@ -324,7 +324,7 @@ The agent follows this cycle, autonomously, until interrupted:
 3. **Commit** — `git commit -m "experiment: <description>"`
 4. **Run benchmark** — `./benchmark.sh > run.log 2>&1`
 5. **Decide** — metric improved? keep the commit. Worse or equal? `git reset HEAD~1 --hard`
-6. **Analyze** — compare result to hypothesis, update session notes
+6. **Analyze** — explain the root cause: what mechanism produced this result?
 7. **Repeat** — never ask "should I continue?", never stop
 
 The simplicity criterion applies: removing code for equal performance is a win. Tiny improvements that add ugly complexity get discarded. The agent optimizes for the metric AND for code quality.
