@@ -286,6 +286,7 @@ Full options:
 | `constraints` | no | `[]` | Rules the agent must follow |
 | `timeout` | no | `300` | Seconds before eval command is killed |
 | `rigor` | no | `standard` | Scientific rigor level: `light`, `standard`, `strict` |
+| `checkpoint_interval` | no | `5` | Run a strategic review every N experiments. `0` or `false` to disable. |
 
 ## Pre-built examples
 
@@ -327,6 +328,52 @@ The agent follows this cycle, autonomously, until interrupted:
 7. **Repeat** — never ask "should I continue?", never stop
 
 The simplicity criterion applies: removing code for equal performance is a win. Tiny improvements that add ugly complexity get discarded. The agent optimizes for the metric AND for code quality.
+
+## Strategic checkpoints
+
+Every N experiments (default 5), the agent pauses the loop to analyze its own optimization trajectory. It computes hit rate, velocity, diversity, and crash rate across recent experiments, then selects a strategy for the next batch:
+
+| Strategy | When | What the agent does |
+|----------|------|-------------------|
+| **Exploit** | High hit rate, metric improving | Keep refining the current approach |
+| **Explore** | Low hit rate, metric flat | Try something structurally different |
+| **Ablate** | Consecutive wins but slowing | Remove components to find what's needed |
+| **Combine** | Multiple individual wins in history | Merge previously successful changes |
+| **Stabilize** | High crash rate | Simplify, fix foundations |
+
+The agent also maintains a "Current theory" section in `autoresearch.md` — a running model of what affects the metric and what doesn't. This compounds intelligence across experiments instead of treating each one independently.
+
+```yaml
+checkpoint_interval: 5    # default — review every 5 experiments
+checkpoint_interval: 10   # less frequent
+checkpoint_interval: 0    # disable checkpoints entirely
+```
+
+## Changelog
+
+### 0.4.0
+
+- **Strategic checkpoints** — adaptive meta-optimization. Every N experiments, the agent analyzes hit rate, velocity, diversity, and crash rate to select a strategy (exploit, explore, ablate, combine, stabilize). Builds a running theory of the system.
+- New config option: `checkpoint_interval` (default `5`, `0` to disable)
+- Enhanced session resume: returning agents run a strategic review before their first experiment
+
+### 0.3.0
+
+- **Scientific rigor levels** — `light`, `standard`, `strict` control how much experimental discipline the agent applies
+- **Metric extractors** — `duration`, `file-size`, `regexp` handle METRIC output automatically
+- **TUI commands** — `autoresearch test`, `start`, `status` for session management
+- Stdlib-only YAML parser (no PyYAML dependency)
+
+### 0.2.0
+
+- **CLI and installer** — `curl | bash` install, interactive setup mode
+- **Example configs** — 6 pre-built lab.yaml files for common optimization targets
+- `--dry-run` flag for init, dirty-tree safety check, METRIC output validation
+
+### 0.1.0
+
+- Initial release — configurable lab.yaml, template-based program.md generation, benchmark.sh harness
+- Agent-agnostic design: works with Claude Code, Codex, Cursor, or any agent that reads markdown
 
 ## Reference
 
