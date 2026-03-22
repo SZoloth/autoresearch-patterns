@@ -14,6 +14,7 @@ usage() {
     echo "  test                          Run benchmark.sh once and show result"
     echo "  start [--agent <name>]        Launch an agent to optimize"
     echo "  status                        Show session summary and results"
+    echo "  learn                         Extract lessons from session to ~/.autoresearch/skills.md"
     echo "  examples                      List available example configs"
     echo "  examples copy <name>          Copy an example to ./lab.yaml"
     echo "  help                          Show this help"
@@ -158,6 +159,13 @@ print()
         ;;
     status)
         exec python3 "$AUTORESEARCH_HOME/lib/status.py" "${2:-lab.yaml}"
+        ;;
+    learn)
+        if [[ ! -f results.tsv ]]; then
+            echo "Error: results.tsv not found. Run experiments first." >&2
+            exit 1
+        fi
+        exec python3 "$AUTORESEARCH_HOME/lib/learn.py" "${2:-lab.yaml}"
         ;;
     examples)
         shift || true

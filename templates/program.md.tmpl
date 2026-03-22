@@ -36,6 +36,7 @@ If grep returns nothing, the run crashed. Read the last 50 lines of `run.log` fo
 - `benchmark.sh` — the eval harness is fixed
 - `program.md` — these instructions are fixed
 - `results.tsv` — append only, never rewrite
+- `last_run.log` — written by benchmark.sh each run
 
 ## Constraints
 {{#each constraints}}
@@ -51,11 +52,53 @@ If grep returns nothing, the run crashed. Read the last 50 lines of `run.log` fo
 | `autoresearch.md` | Living session document — update as you go |
 | `results.tsv` | Tab-separated experiment log — append each result |
 | `autoresearch.ideas.md` | Ideas backlog — save promising deferred ideas |
+| `last_run.log` | Full output from the last benchmark run — read during analysis |
 
 {{scientist_block}}
 
 {{#if has_checkpoint}}
 {{checkpoint_block}}
+
+## Meta-optimization
+
+After every 3rd strategic checkpoint, run this additional review:
+
+1. **Audit instruction effectiveness** — which rules from this program correlated with successful experiments? Which did you never reference or that led you astray?
+2. **Identify dead weight** — any instruction you haven't applied in the last 15 experiments is a candidate for removal.
+3. **Propose improvements** — write a `## Meta-optimization review` section in `autoresearch.md`:
+   - Rules that helped (with evidence from experiment results)
+   - Rules that are dead weight (with reasoning)
+   - Proposed additions based on patterns discovered during experiments
+4. **Do NOT modify program.md** — it is read-only. Record proposals in `autoresearch.md` for the human to review.
+
+### Branch strategy protocol
+
+When a checkpoint selects **Branch**:
+
+1. Note the current commit hash as your branch point.
+2. Pick 2-3 competing approaches from your ideas backlog.
+3. For each approach, create a sub-branch:
+   ```bash
+   git checkout -b autoresearch/branch-<approach> <branch-point-hash>
+   ```
+4. Run 3-5 experiments on each sub-branch following the normal loop.
+5. Compare the best metric from each sub-branch.
+6. Merge the winner back to the main session branch:
+   ```bash
+   git checkout <original-branch>
+   git merge autoresearch/branch-<winner>
+   ```
+7. Delete losing sub-branches: `git branch -D autoresearch/branch-<loser>`
+8. Log the comparison and decision in `autoresearch.md`.
+9. Resume the normal experiment loop from the merged state.
+{{/if}}
+
+{{#if has_skills}}
+## Lessons from previous sessions
+
+These patterns were extracted from past autoresearch sessions. Use them as starting context — they may or may not apply to this specific optimization target.
+
+{{skills_block}}
 {{/if}}
 
 ## The experiment loop
@@ -74,7 +117,7 @@ Before your first new experiment, run a strategic review (see above) to orient y
 
 1. **Read state** — check `autoresearch.md`, `results.tsv`, and `git log --oneline` for context.
 2. **Hypothesize** — before touching any code, write down what you expect to happen and why.
-3. **Modify files** — make a single, focused change to the mutable files.
+3. **Modify files** — make a single, focused change to the mutable files. Classify this experiment as one of: `architecture` (structural changes), `parameter` (tuning values/config), `simplification` (removing code/complexity), `algorithmic` (different approach/algorithm), `infrastructure` (build/tooling/config), `other`.
 4. **Commit** — `git add <changed files> && git commit -m "experiment: <short description>"`
 5. **Run** — `./benchmark.sh > run.log 2>&1`
 6. **Read results** — `grep "^METRIC" run.log`
@@ -82,7 +125,7 @@ Before your first new experiment, run a strategic review (see above) to orient y
    - **Improved** ({{metric.direction}} {{metric.name}}) → **keep**. Log to `results.tsv` with status `keep`.
    - **Equal or worse** → **discard**. Log to `results.tsv` with status `discard`. Then `git reset HEAD~1 --hard` to remove the failed commit.
    - **Crashed** → log with status `crash` and metric value `0`. If the bug is trivial (typo, missing import), fix and retry. Otherwise, `git reset HEAD~1 --hard` and move on.
-8. **Analyze** — explain the root cause: what causal mechanism produced this result? Update `autoresearch.md` with the mechanism and what it reveals about the system.
+8. **Analyze** — read `last_run.log` for the full eval output (warnings, timing breakdowns, error patterns). Explain the root cause: what causal mechanism produced this result? Update `autoresearch.md` with the mechanism and what it reveals about the system.
 9. **Update backlog** — re-prioritize `autoresearch.ideas.md` based on new insights.
 10. **Repeat** — go to step 2. Never stop.
 {{#if has_checkpoint}}
@@ -94,12 +137,13 @@ Before your first new experiment, run a strategic review (see above) to orient y
 `results.tsv` is tab-separated with these columns:
 
 ```
-commit	{{metric.name}}	status	description
+commit	{{metric.name}}	status	type	description
 ```
 
 - `commit`: short git hash (7 chars)
 - `{{metric.name}}`: the metric value (use `0` for crashes)
 - `status`: `keep`, `discard`, or `crash`
+- `type`: experiment category — one of: `architecture`, `parameter`, `simplification`, `algorithmic`, `infrastructure`, `other`
 - `description`: short text describing the experiment
 
 ### Simplicity criterion

@@ -26,11 +26,12 @@ _AR_EVAL_EOF
 if ! timeout "${TIMEOUT}s" bash "$_AR_SCRIPT" > .autoresearch_output 2>&1; then
     echo "EVAL FAILED (exit code $? or timeout)" >&2
     cat .autoresearch_output >&2
-    rm -f .autoresearch_output
+    cp .autoresearch_output last_run.log 2>/dev/null || true
     exit 1
 fi
 
-OUTPUT=$(cat .autoresearch_output)
+cp .autoresearch_output last_run.log
+OUTPUT=$(cat last_run.log)
 rm -f .autoresearch_output
 
 # Output non-METRIC lines as context, then METRIC lines.

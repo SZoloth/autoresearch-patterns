@@ -15,8 +15,8 @@ DEFAULTS = {
 
 REQUIRED = ["name", "metric", "eval", "mutable"]
 
-VALID_EXTRACTORS = {"duration", "file-size", "regexp"}
-VALID_RIGOR = {"light", "standard", "strict"}
+VALID_EXTRACTORS = {"duration", "file-size", "regexp", "composite"}
+VALID_RIGOR = {"light", "standard", "strict", "adaptive"}
 
 # ── Scientist prompt blocks by rigor level ──────────────────────────────
 
@@ -131,6 +131,7 @@ Analyze the last {{checkpoint_interval}} rows of `results.tsv`:
 - **Velocity** — compare the best metric value in this batch to the best in the batch before it. Is improvement accelerating, steady, or stalling?
 - **Diversity** — look at the `description` column. Are you varying your approach (different files, different strategies) or grinding the same angle?
 - **Crash rate** — what fraction were `crash`?
+- **Per-type success rates** — group experiments by `type` column. Which categories (architecture, parameter, simplification, algorithmic, infrastructure) have the highest keep rate? Which have the highest crash rate?
 
 ### 2. Select a strategy
 
@@ -142,6 +143,8 @@ Use the first matching rule:
 | Hit rate >60% AND velocity positive | **Exploit** | You're in a productive vein. Keep refining the current approach with small, targeted changes. |
 | 3+ consecutive `keep` but velocity declining | **Ablate** | You're adding complexity for diminishing returns. Remove components one at a time to find what's actually needed. |
 | Multiple past `keep` experiments that haven't been combined | **Combine** | You have individual wins sitting in history. Try merging two or more previously successful changes. |
+| Per-type data shows one category with >70% hit rate while others are <30% | **Specialize** | You've found a productive experiment category. Focus the next batch exclusively on that type. |
+| Hit rate >40% AND 2+ competing hypotheses in ideas backlog | **Branch** | You have competing hypotheses worth testing in parallel. Fork sub-branches, test each, merge the winner. See the branch protocol below. |
 | Hit rate <20% AND velocity flat or negative | **Explore** | Current approach is exhausted. Try something structurally different — a new algorithm, a different file, a fundamentally different strategy. |
 | None of the above | **Continue** | No strong signal. Pick the most promising idea from your backlog and proceed. |
 
@@ -150,7 +153,7 @@ Use the first matching rule:
 Look across all of `results.tsv`, not just the last batch:
 
 - **File-level patterns** — which files appear most often in successful experiments? Which in crashes?
-- **Category patterns** — are certain types of changes (algorithmic, structural, parameter tuning) more productive than others?
+- **Category patterns** — compute keep rate per `type` across all results. Which experiment types are most productive? If a category has >5 attempts and <10% success, deprioritize it. Shift effort toward high-hit-rate categories.
 - **Plateau detection** — has the metric stopped improving? How many experiments since the last `keep`?
 - **Anomaly review** — any result that's surprisingly good or bad? Could it be measurement noise?
 
@@ -186,6 +189,20 @@ Add a section to `autoresearch.md`:
 ```
 
 Then resume the experiment loop with your chosen strategy guiding your next hypothesis."""
+
+# ── Adaptive rigor escalation block ──────────────────────────────────
+
+ADAPTIVE_ESCALATION_BLOCK = """\
+
+### Rigor escalation check
+
+This session started in **light** mode for maximum experiment throughput. At each checkpoint, evaluate whether to escalate to **standard** mode:
+
+- Hit rate below 30% in the last batch → **escalate**. Low hit rates mean you need more disciplined hypothesis formation.
+- Velocity flat or declining for 2+ consecutive checkpoints → **escalate**. Plateaus need deeper causal analysis.
+- 3+ crashes in the last batch → **escalate**. Frequent crashes suggest insufficient pre-experiment reasoning.
+
+**To escalate:** Write "RIGOR ESCALATED TO STANDARD" in `autoresearch.md`. From that point forward, follow the standard scientific method: write a hypothesis before each experiment, change one variable at a time, and complete the full after-experiment analysis (result, vs hypothesis, root cause, learnings). Once escalated, do not de-escalate."""
 
 
 def _build_extraction_block(metric):
@@ -230,6 +247,70 @@ def _build_extraction_block(metric):
             f'_AR_VAL=$(cat .autoresearch_output | python3 -c "import sys,re; m=re.search(r\'{arg}\', sys.stdin.read()); print(m.group(1) if m else \'\')")\n'
             f'echo "METRIC {name}=$_AR_VAL"'
         )
+    elif extractor == "composite":
+        components = metric.get("components", [])
+        if not components:
+            print("Error: composite extractor requires metric.components list", file=sys.stderr)
+            sys.exit(1)
+        # Validate components
+        if not isinstance(components, list) or not all(isinstance(c, dict) for c in components):
+            print("Error: metric.components must be a list of mappings. Install PyYAML (pip install pyyaml) for complex configs, or use the interactive setup.", file=sys.stderr)
+            sys.exit(1)
+        total_weight = 0
+        for comp in components:
+            for field in ("name", "weight", "direction", "baseline"):
+                if field not in comp:
+                    print(f"Error: composite component missing '{field}'. Each component needs: name, weight, direction, baseline", file=sys.stderr)
+                    sys.exit(1)
+            total_weight += float(comp["weight"])
+            if comp["direction"] not in ("lower", "higher"):
+                print(f"Error: component '{comp['name']}' direction must be 'lower' or 'higher'", file=sys.stderr)
+                sys.exit(1)
+        if abs(total_weight - 1.0) > 0.01:
+            print(f"Error: composite component weights must sum to 1.0, got {total_weight}", file=sys.stderr)
+            sys.exit(1)
+
+        # Build a Python script that extracts multiple METRIC lines and computes composite
+        comp_defs = []
+        for comp in components:
+            comp_defs.append(
+                f'    {{"name": "{comp["name"]}", "weight": {comp["weight"]}, '
+                f'"direction": "{comp["direction"]}", "baseline": {comp["baseline"]}}}'
+            )
+        comp_json = ",\n".join(comp_defs)
+
+        return (
+            '{eval_cmd}\n'
+            'python3 -c "\n'
+            'import sys, re\n'
+            'output = open(\".autoresearch_output\").read() if True else \"\"\n'
+            'metrics = {{}}\n'
+            'for line in output.split(chr(10)):\n'
+            '    if line.startswith(\"METRIC \"):\n'
+            '        pair = line[7:]\n'
+            '        k, v = pair.split(\"=\", 1)\n'
+            '        try: metrics[k] = float(v)\n'
+            '        except: pass\n'
+            'components = [\n'
+            f'{comp_json}\n'
+            ']\n'
+            'score = 0.0\n'
+            'for c in components:\n'
+            '    val = metrics.get(c[\"name\"])\n'
+            '    if val is None:\n'
+            '        print(f\"WARNING: component {{c[\\\"name\\\"]}} not found in output\", file=sys.stderr)\n'
+            '        continue\n'
+            '    baseline = c[\"baseline\"]\n'
+            '    if baseline == 0: baseline = 1\n'
+            '    if c[\"direction\"] == \"lower\":\n'
+            '        normalized = max(0, (2 * baseline - val) / baseline)\n'
+            '    else:\n'
+            '        normalized = val / baseline\n'
+            '    score += c[\"weight\"] * normalized\n'
+            '    print(f\"METRIC {{c[\\\"name\\\"]}}={{val}}\")\n'
+            f'print(f\"METRIC {name}={{score:.4f}}\")\n'
+            '"\n'
+        )
     else:
         print(f"Error: unknown extractor '{extractor}'. Valid: {', '.join(sorted(VALID_EXTRACTORS))}", file=sys.stderr)
         sys.exit(1)
@@ -262,7 +343,31 @@ def parse_yaml_simple(text):
         if indent > 0 and stripped.startswith("- "):
             value = stripped[2:].strip()
             if current_key and isinstance(result.get(current_key), list):
-                result[current_key].append(value)
+                # Check if this is a list-of-dicts (e.g. "- name: foo")
+                item_match = re.match(r"^(\w+):\s*(.*)", value)
+                if item_match:
+                    # Start a dict item — first key:value is inline
+                    item = {item_match.group(1): _cast(item_match.group(2).strip())}
+                    item_indent = indent
+                    # Collect subsequent indented key:value pairs
+                    i += 1
+                    while i < len(lines):
+                        nline = lines[i]
+                        nstripped = nline.strip()
+                        if not nstripped or nstripped.startswith("#"):
+                            i += 1
+                            continue
+                        nindent = len(nline) - len(nline.lstrip())
+                        if nindent <= item_indent:
+                            break  # Back to same or lower indent — done with this item
+                        sub_match = re.match(r"^(\w+):\s*(.*)", nstripped)
+                        if sub_match:
+                            item[sub_match.group(1)] = _cast(sub_match.group(2).strip())
+                        i += 1
+                    result[current_key].append(item)
+                    continue
+                else:
+                    result[current_key].append(value)
             i += 1
             continue
 
@@ -361,6 +466,56 @@ def _cast(value):
     return value
 
 
+def _parse_components_from_text(text):
+    """Extract metric.components list-of-dicts directly from YAML text.
+
+    Fallback for the simple parser which can't handle deeply nested structures.
+    Looks for the 'components:' key under 'metric:' and parses the list items.
+    """
+    lines = text.split("\n")
+    components = []
+    in_components = False
+    current_item = None
+    comp_indent = None
+
+    for line in lines:
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        indent = len(line) - len(line.lstrip())
+
+        if stripped == "components:":
+            in_components = True
+            comp_indent = indent
+            continue
+
+        if in_components:
+            # End of components block — back to same or lower indent and not a list item
+            if indent <= comp_indent and not stripped.startswith("-"):
+                break
+
+            if stripped.startswith("- "):
+                # New component item
+                if current_item:
+                    components.append(current_item)
+                current_item = {}
+                # Parse inline key:value
+                item_text = stripped[2:].strip()
+                m = re.match(r"^(\w+):\s*(.*)", item_text)
+                if m:
+                    current_item[m.group(1)] = _cast(m.group(2).strip())
+            elif current_item is not None:
+                # Sub-key of current item
+                m = re.match(r"^(\w+):\s*(.*)", stripped)
+                if m:
+                    current_item[m.group(1)] = _cast(m.group(2).strip())
+
+    if current_item:
+        components.append(current_item)
+
+    return components if components else None
+
+
 def parse_config(path):
     """Parse a lab.yaml file and return validated config dict."""
     text = Path(path).read_text()
@@ -371,6 +526,17 @@ def parse_config(path):
         config = yaml.safe_load(text)
     except ImportError:
         config = parse_yaml_simple(text)
+        # The simple parser can't handle list-of-dicts nested under a dict
+        # (e.g. metric.components). Parse components manually if needed.
+        metric = config.get("metric", {})
+        if isinstance(metric, dict) and metric.get("extract", "").split(None, 1)[0:1] == ["composite"]:
+            components = _parse_components_from_text(text)
+            if components:
+                metric["components"] = components
+                # Clean up keys that leaked from components into metric
+                for key in ("weight", "baseline"):
+                    if key in metric and not isinstance(metric[key], list):
+                        del metric[key]
 
     # Apply defaults
     for key, default in DEFAULTS.items():
@@ -424,21 +590,46 @@ def parse_config(path):
         "standard": SCIENTIST_STANDARD,
         "strict": SCIENTIST_STRICT,
     }
-    config["scientist_block"] = RIGOR_BLOCKS[rigor]
+    if rigor == "adaptive":
+        config["scientist_block"] = SCIENTIST_LIGHT
+    else:
+        config["scientist_block"] = RIGOR_BLOCKS[rigor]
 
     # Validate and generate checkpoint_block
     checkpoint_interval = config.get("checkpoint_interval", 5)
     if checkpoint_interval is False or checkpoint_interval == 0:
-        config["checkpoint_interval"] = 0
-        config["checkpoint_block"] = ""
-        config["has_checkpoint"] = False
-    else:
+        if rigor == "adaptive":
+            # Adaptive rigor requires checkpoints — force default interval
+            checkpoint_interval = 5
+            print("Note: adaptive rigor requires checkpoints. Setting checkpoint_interval to 5.", file=sys.stderr)
+        else:
+            config["checkpoint_interval"] = 0
+            config["checkpoint_block"] = ""
+            config["has_checkpoint"] = False
+    if checkpoint_interval:
         if not isinstance(checkpoint_interval, int) or checkpoint_interval < 1:
             print(f"Error: checkpoint_interval must be a positive integer or 0/false to disable, got '{checkpoint_interval}'", file=sys.stderr)
             sys.exit(1)
         config["checkpoint_interval"] = checkpoint_interval
-        config["checkpoint_block"] = CHECKPOINT_BLOCK.replace("{{checkpoint_interval}}", str(checkpoint_interval))
+        block = CHECKPOINT_BLOCK.replace("{{checkpoint_interval}}", str(checkpoint_interval))
+        if rigor == "adaptive":
+            block += ADAPTIVE_ESCALATION_BLOCK
+        config["checkpoint_block"] = block
         config["has_checkpoint"] = True
+
+    # Inject skills from previous sessions
+    skills_path = Path.home() / ".autoresearch" / "skills.md"
+    if skills_path.exists():
+        content = skills_path.read_text().strip()
+        if content:
+            config["skills_block"] = content
+            config["has_skills"] = True
+        else:
+            config["skills_block"] = ""
+            config["has_skills"] = False
+    else:
+        config["skills_block"] = ""
+        config["has_skills"] = False
 
     # Generate extraction_block
     extraction_block = _build_extraction_block(metric)

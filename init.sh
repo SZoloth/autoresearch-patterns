@@ -135,7 +135,7 @@ python3 "$SCRIPT_DIR/lib/render.py" "$SCRIPT_DIR/templates/session.md.tmpl" "$TM
 chmod +x benchmark.sh
 
 # Create results.tsv with header
-printf "commit\t%s\tstatus\tdescription\n" "$METRIC_NAME" > results.tsv
+printf "commit\t%s\tstatus\ttype\tdescription\n" "$METRIC_NAME" > results.tsv
 
 # Create empty ideas backlog
 touch autoresearch.ideas.md

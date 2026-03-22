@@ -69,12 +69,14 @@ def main():
     print("     2) file-size   — measure a file/directory size (KB)")
     print("     3) regexp      — capture a number from output")
     print("     4) manual      — I'll output METRIC %s=<value> myself" % metric_name)
+    print("     5) composite   — weighted combination of multiple metrics")
     print()
     extractor_choice = ""
-    while extractor_choice not in ("1", "2", "3", "4"):
-        extractor_choice = input("   Choice [1-4]: ").strip()
+    while extractor_choice not in ("1", "2", "3", "4", "5"):
+        extractor_choice = input("   Choice [1-5]: ").strip()
 
     extract_value = ""
+    components = []
     if extractor_choice == "1":
         extract_value = "duration"
     elif extractor_choice == "2":
@@ -84,6 +86,28 @@ def main():
         extract_pattern = prompt("   Regex pattern",
                                  hint="Must have a capture group, e.g. (\\d+) violations")
         extract_value = f"regexp {extract_pattern}"
+    elif extractor_choice == "5":
+        extract_value = "composite"
+        print()
+        print("   Define component metrics (your eval must output METRIC <name>=<value> for each).")
+        print("   Weights must sum to 1.0.")
+        print()
+        while True:
+            comp_name = prompt("   Component metric name (empty to finish)", required=False)
+            if not comp_name:
+                if not components:
+                    print("  At least one component is required.")
+                    continue
+                break
+            comp_weight = prompt(f"   Weight for {comp_name} (0.0-1.0)")
+            comp_dir = prompt_choice(f"   Direction for {comp_name}?", ["lower", "higher"])
+            comp_baseline = prompt(f"   Baseline value for {comp_name}")
+            components.append({
+                "name": comp_name,
+                "weight": float(comp_weight),
+                "direction": comp_dir,
+                "baseline": float(comp_baseline),
+            })
 
     print()
     if extract_value:
@@ -118,11 +142,12 @@ def main():
     print("     1) light    — log results, maintain ideas backlog")
     print("     2) standard — hypothesize, one-variable, structured analysis (recommended)")
     print("     3) strict   — repeat runs for confidence, control experiments")
+    print("     4) adaptive — start light, escalate to standard when improvements plateau")
     print()
     rigor_choice = ""
-    while rigor_choice not in ("1", "2", "3"):
-        rigor_choice = input("   Choice [1-3, default 2]: ").strip() or "2"
-    rigor = {"1": "light", "2": "standard", "3": "strict"}[rigor_choice]
+    while rigor_choice not in ("1", "2", "3", "4"):
+        rigor_choice = input("   Choice [1-4, default 2]: ").strip() or "2"
+    rigor = {"1": "light", "2": "standard", "3": "strict", "4": "adaptive"}[rigor_choice]
 
     # Build YAML
     lines = [f"name: {name}"]
@@ -136,6 +161,13 @@ def main():
     lines.append(f"  direction: {metric_dir}")
     if extract_value:
         lines.append(f"  extract: {extract_value}")
+    if components:
+        lines.append("  components:")
+        for comp in components:
+            lines.append(f"    - name: {comp['name']}")
+            lines.append(f"      weight: {comp['weight']}")
+            lines.append(f"      direction: {comp['direction']}")
+            lines.append(f"      baseline: {comp['baseline']}")
     lines.append("")
     lines.append("eval: |")
     for eval_line in eval_cmd.split("\n"):

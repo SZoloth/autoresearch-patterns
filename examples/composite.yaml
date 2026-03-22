@@ -1,0 +1,30 @@
+name: optimize-speed-and-size
+description: Balance build speed and bundle size using a weighted composite metric
+
+metric:
+  name: composite_score
+  unit: points
+  direction: higher
+  extract: composite
+  components:
+    - name: build_seconds
+      weight: 0.5
+      direction: lower
+      baseline: 30
+    - name: bundle_kb
+      weight: 0.5
+      direction: lower
+      baseline: 500
+
+eval: |
+  pnpm build 2>&1
+  echo "METRIC build_seconds=$SECONDS"
+  echo "METRIC bundle_kb=$(du -sk dist/ | cut -f1)"
+
+mutable: [src/, vite.config.ts]
+immutable: [src/**/*.test.ts, package.json]
+constraints:
+  - Build must succeed without errors
+  - All features must still work
+  - No new dependencies
+timeout: 300

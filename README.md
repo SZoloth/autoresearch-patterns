@@ -61,7 +61,7 @@ It will ask:
 2. How do you measure it? (metric name, direction, extractor)
 3. What files can the agent change?
 4. Any constraints?
-5. How much scientific rigor? (light / standard / strict)
+5. How much scientific rigor? (light / standard / strict / adaptive)
 
 Then it generates `lab.yaml` and all session files in one step.
 
@@ -212,6 +212,7 @@ Set `metric.extract` in lab.yaml and autoresearch handles the METRIC output for 
 | `duration` | Times how long your eval command takes (seconds) | `extract: duration` |
 | `file-size <path>` | Measures file/directory size in KB after eval runs | `extract: file-size dist/` |
 | `regexp <pattern>` | Captures a number from eval output using a regex | `extract: regexp (\d+) violations` |
+| `composite` | Weighted combination of multiple metrics into a single score | `extract: composite` (requires `metric.components`) |
 
 **Before** (manual timing with macOS-incompatible `date +%s%N`):
 ```yaml
@@ -241,7 +242,7 @@ If you don't set `metric.extract`, your eval command must output the METRIC line
 The `rigor` field controls how much scientific discipline the agent applies. Default is `standard`.
 
 ```yaml
-rigor: standard   # light | standard | strict
+rigor: standard   # light | standard | strict | adaptive
 ```
 
 | Level | What the agent does |
@@ -249,12 +250,15 @@ rigor: standard   # light | standard | strict
 | **light** | Log results, maintain ideas backlog |
 | **standard** | Hypothesize before each experiment, change one variable at a time, root-cause analysis after each result, detect diminishing returns |
 | **strict** | All of standard + run baseline 3x for variance, confirmation runs on improvements, control experiments every 5th run, full lab notebook entries |
+| **adaptive** | Start in light mode for maximum throughput, automatically escalate to standard when improvements plateau or crash rate spikes |
 
 **light** is for quick-and-dirty optimization where you just want the agent grinding.
 
 **standard** is the sweet spot — the agent writes a hypothesis before each change, does root-cause analysis after each result (tracing the causal mechanism, not just noting pass/fail), and re-prioritizes ideas based on what it learned. This catches the common failure mode where agents make random changes without understanding why.
 
 **strict** is for noisy metrics or when you need confidence in results. The agent establishes statistical baselines, confirms improvements with repeat runs, and periodically runs control experiments to catch drift.
+
+**adaptive** applies the "bitter lesson" — raw volume of experiments matters more than per-experiment rigor in early phases. Starts in light mode for maximum throughput, then auto-escalates to standard mode at strategic checkpoints when hit rate drops below 30%, velocity stalls, or crashes spike. Requires checkpoints to be enabled.
 
 ## Configuration reference
 
@@ -279,13 +283,14 @@ Full options:
 | `metric.name` | yes | — | Name of the metric to optimize |
 | `metric.unit` | no | — | Unit label (seconds, KB, etc.) |
 | `metric.direction` | yes | — | `lower` or `higher` |
-| `metric.extract` | no | — | Built-in extractor: `duration`, `file-size <path>`, `regexp <pattern>` |
+| `metric.extract` | no | — | Built-in extractor: `duration`, `file-size <path>`, `regexp <pattern>`, `composite` |
+| `metric.components` | no | — | For composite extractor: list of `{name, weight, direction, baseline}` |
 | `eval` | yes | — | Shell command to run (outputs `METRIC` if no extractor) |
 | `mutable` | yes | — | Files/directories the agent may modify |
 | `immutable` | no | `[]` | Files the agent must not touch |
 | `constraints` | no | `[]` | Rules the agent must follow |
 | `timeout` | no | `300` | Seconds before eval command is killed |
-| `rigor` | no | `standard` | Scientific rigor level: `light`, `standard`, `strict` |
+| `rigor` | no | `standard` | Scientific rigor level: `light`, `standard`, `strict`, `adaptive` |
 | `checkpoint_interval` | no | `5` | Run a strategic review every N experiments. `0` or `false` to disable. |
 
 ## Pre-built examples
@@ -302,6 +307,7 @@ autoresearch examples
 | `build-speed` | build_seconds | lower | Speed up production build |
 | `accessibility` | violations | lower | Fix axe-core a11y violations |
 | `prompt-engineering` | eval_score | higher | Optimize LLM prompts against an eval |
+| `composite` | composite_score | higher | Balance multiple competing metrics (e.g. speed + size) |
 
 ## CLI reference
 
@@ -310,6 +316,7 @@ autoresearch init [--dry-run] [lab.yaml]    Set up a session (interactive if no 
 autoresearch test                           Run benchmark once and show result
 autoresearch start [--agent <name>]         Launch an agent to optimize
 autoresearch status                         Show session summary and results
+autoresearch learn                          Extract session lessons to ~/.autoresearch/skills.md
 autoresearch examples                       List available example configs
 autoresearch examples copy <name>           Copy an example to ./lab.yaml
 autoresearch help                           Show help
@@ -339,6 +346,8 @@ Every N experiments (default 5), the agent pauses the loop to analyze its own op
 | **Explore** | Low hit rate, metric flat | Try something structurally different |
 | **Ablate** | Consecutive wins but slowing | Remove components to find what's needed |
 | **Combine** | Multiple individual wins in history | Merge previously successful changes |
+| **Specialize** | One experiment type dominates | Focus on the most productive category |
+| **Branch** | Competing hypotheses | Fork sub-branches, test each, merge winner |
 | **Stabilize** | High crash rate | Simplify, fix foundations |
 
 The agent also maintains a "Current theory" section in `autoresearch.md` — a running model of what affects the metric and what doesn't. This compounds intelligence across experiments instead of treating each one independently.
@@ -350,6 +359,16 @@ checkpoint_interval: 0    # disable checkpoints entirely
 ```
 
 ## Changelog
+
+### 0.6.0
+
+- **Full eval trace capture** — `benchmark.sh` now preserves the complete eval output in `last_run.log`. Agents read it during the Analyze step for richer root-cause analysis (warnings, profiler data, error patterns).
+- **Experiment-type tagging** — each experiment is classified as `architecture`, `parameter`, `simplification`, `algorithmic`, `infrastructure`, or `other`. Strategic checkpoints compute per-type success rates and select strategies accordingly.
+- **New strategies: Specialize and Branch** — Specialize focuses on the most productive experiment category. Branch forks 2-3 competing hypotheses into git sub-branches, tests each, and merges the winner.
+- **Adaptive rigor** — new `rigor: adaptive` starts in light mode for maximum throughput, auto-escalates to standard when improvements plateau or crash rate spikes.
+- **Cross-session skill extraction** — `autoresearch learn` extracts generalizable lessons from a completed session and saves them to `~/.autoresearch/skills.md`. Future sessions automatically inject these lessons into `program.md`.
+- **Meta-optimization** — every 3rd strategic checkpoint, the agent audits which program.md instructions correlate with successful experiments and proposes improvements.
+- **Composite metric** — new `extract: composite` combines multiple metrics into a weighted score. Define components with name, weight, direction, and baseline.
 
 ### 0.5.0
 
