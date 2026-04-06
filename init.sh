@@ -164,8 +164,9 @@ print(f'  {DIM}Rigor{RESET}     $RIGOR')
 print(f'  {DIM}Files{RESET}     program.md, benchmark.sh, autoresearch.md, results.tsv')
 print()
 print(f'  {DIM}Next steps:{RESET}')
-print(f'    {BOLD_WHITE}autoresearch test{RESET}    verify your benchmark works')
-print(f'    {BOLD_WHITE}autoresearch start{RESET}   launch an agent to optimize')
+print(f'    {BOLD_WHITE}autoresearch test{RESET}        verify your benchmark works')
+print(f'    {BOLD_WHITE}autoresearch calibrate{RESET}   validate stability before optimization')
+print(f'    {BOLD_WHITE}autoresearch start{RESET}       launch an agent to optimize')
 print()
 " 2>/dev/null || {
     # Fallback
@@ -173,5 +174,5 @@ print()
     echo "Session initialized: $NAME"
     echo "Branch: $BRANCH"
     echo ""
-    echo "Next: autoresearch test, then autoresearch start"
+    echo "Next: autoresearch test, then autoresearch calibrate, then autoresearch start"
 }

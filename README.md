@@ -13,7 +13,7 @@ You tell autoresearch what to optimize. It generates a `program.md` — a self-c
 No daemon. No runner process. The agent IS the loop.
 
 ```
-You write lab.yaml → autoresearch init → generates program.md → Agent follows it → Loop runs forever
+You write lab.yaml → autoresearch init → generates program.md → calibrate → Agent follows it → Loop runs forever
 ```
 
 ## Install
@@ -130,7 +130,30 @@ On subsequent runs, it compares against the current best:
   duration_seconds = 29 seconds  new best! ↓36% from baseline
 ```
 
-### 4. Start an agent
+### 4. Calibrate the benchmark
+
+```bash
+autoresearch calibrate
+```
+
+Runs the benchmark 3 times (configurable with `--runs N`), computes variance, and writes `calibration.md`. This tells you whether your metric is stable enough to trust single-run comparisons.
+
+```
+Running calibration (3 runs)...
+
+  Run 1: 45 seconds
+  Run 2: 47 seconds
+  Run 3: 44 seconds
+
+  Mean: 45.3 seconds   Std dev: 1.2 seconds (2.7%)
+
+  ✓ Low variance — single-run comparisons are reliable.
+  Wrote calibration.md
+```
+
+If `calibration.md` exists when you run `autoresearch start`, the calibration data is automatically included in the agent prompt so it can account for measurement noise.
+
+### 5. Start an agent
 
 ```bash
 autoresearch start
@@ -150,7 +173,7 @@ claude "Read program.md and follow the instructions exactly."
 cursor   # open program.md, tell the agent to follow it
 ```
 
-### 5. Go do something else
+### 6. Go do something else
 
 The agent runs indefinitely. Each experiment takes however long your eval command takes. For a test suite that runs in 30 seconds, you'll get ~120 experiments per hour.
 
@@ -178,7 +201,7 @@ autoresearch status
     29 seconds ↓6% *  final optimization
 ```
 
-### 6. Resume after interruption
+### 7. Resume after interruption
 
 If the agent stops (context limit, crash, you killed it), start a new one:
 
@@ -188,7 +211,7 @@ autoresearch start
 
 The new agent reads `autoresearch.md`, `results.tsv`, and `git log` to understand what's been tried, then picks up where the last session left off. If there's an `autoresearch.ideas.md` with deferred ideas, it uses those as inspiration.
 
-### 7. Merge results
+### 8. Merge results
 
 When you're happy with the improvements:
 
@@ -314,6 +337,7 @@ autoresearch examples
 ```
 autoresearch init [--dry-run] [lab.yaml]    Set up a session (interactive if no lab.yaml)
 autoresearch test                           Run benchmark once and show result
+autoresearch calibrate [--runs N]           Validate benchmark stability (default 3 runs)
 autoresearch start [--agent <name>]         Launch an agent to optimize
 autoresearch status                         Show session summary and results
 autoresearch learn                          Extract session lessons to ~/.autoresearch/skills.md

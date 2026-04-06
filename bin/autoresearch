@@ -12,6 +12,7 @@ usage() {
     echo "Commands:"
     echo "  init [--dry-run] [lab.yaml]   Initialize an autoresearch session"
     echo "  test                          Run benchmark.sh once and show result"
+    echo "  calibrate [--runs N]          Validate benchmark stability before optimization"
     echo "  start [--agent <name>]        Launch an agent to optimize"
     echo "  status                        Show session summary and results"
     echo "  learn                         Extract lessons from session to ~/.autoresearch/skills.md"
@@ -19,7 +20,7 @@ usage() {
     echo "  examples copy <name>          Copy an example to ./lab.yaml"
     echo "  help                          Show this help"
     echo ""
-    echo "Run 'autoresearch init' in a git repo to get started."
+    echo "Typical flow: init → test → calibrate → start"
     echo "If no lab.yaml exists, interactive setup will guide you."
 }
 
@@ -91,7 +92,7 @@ if results:
 print(format_test_result(metric_key, metric_val, unit, direction, best, baseline))
 print()
 if best is None:
-    print(f'  {DIM}Baseline recorded.{RESET} Run {BOLD_WHITE}autoresearch start{RESET} to begin optimization.')
+    print(f'  {DIM}Baseline recorded.{RESET} Run {BOLD_WHITE}autoresearch calibrate{RESET} to validate stability.')
 else:
     print(f'  Run {BOLD_WHITE}autoresearch status{RESET} for full results.')
 print()
@@ -102,14 +103,24 @@ print()
             echo "Setup verified. Run 'autoresearch start' to begin optimization."
         }
         ;;
+    calibrate)
+        shift || true
+        if [[ ! -f benchmark.sh ]]; then
+            echo "Error: benchmark.sh not found. Run 'autoresearch init' first." >&2
+            exit 1
+        fi
+        exec python3 "$AUTORESEARCH_HOME/lib/calibrate.py" "$@"
+        ;;
     start)
         shift || true
         AGENT=""
+        SKIP_CAL=false
 
-        # Parse --agent flag
+        # Parse flags
         while [[ $# -gt 0 ]]; do
             case "$1" in
                 --agent) AGENT="$2"; shift 2 ;;
+                --skip-calibration) SKIP_CAL=true; shift ;;
                 *) echo "Unknown option: $1" >&2; exit 1 ;;
             esac
         done
@@ -119,7 +130,19 @@ print()
             exit 1
         fi
 
-        PROMPT='Read program.md and follow the instructions exactly.'
+        # Soft calibration gate
+        if [[ ! -f calibration.md ]] && [[ "$SKIP_CAL" != true ]]; then
+            echo "Note: no calibration.md found."
+            echo "  Run 'autoresearch calibrate' to validate your benchmark first."
+            echo "  Or use 'autoresearch start --skip-calibration' to skip."
+            echo ""
+        fi
+
+        if [[ -f calibration.md ]]; then
+            PROMPT='Read program.md and calibration.md, then follow the instructions in program.md exactly. Use the calibrated baseline from calibration.md as your reference point.'
+        else
+            PROMPT='Read program.md and follow the instructions exactly.'
+        fi
 
         # Auto-detect agent if not specified
         if [[ -z "$AGENT" ]]; then

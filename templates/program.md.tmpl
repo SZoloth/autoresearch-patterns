@@ -37,6 +37,9 @@ If grep returns nothing, the run crashed. Read the last 50 lines of `run.log` fo
 - `program.md` — these instructions are fixed
 - `results.tsv` — append only, never rewrite
 - `last_run.log` — written by benchmark.sh each run
+{{#if has_calibration}}
+- `calibration.md` — calibration report is fixed
+{{/if}}
 
 ## Constraints
 {{#each constraints}}
@@ -53,6 +56,21 @@ If grep returns nothing, the run crashed. Read the last 50 lines of `run.log` fo
 | `results.tsv` | Tab-separated experiment log — append each result |
 | `autoresearch.ideas.md` | Ideas backlog — save promising deferred ideas |
 | `last_run.log` | Full output from the last benchmark run — read during analysis |
+{{#if has_calibration}}
+| `calibration.md` | Calibration report — baseline variance and confidence (read-only) |
+{{/if}}
+
+{{#if has_calibration}}
+## Calibration
+
+This session has been calibrated. Read `calibration.md` for the full report.
+
+- **Baseline:** {{calibration_baseline}} (median of {{calibration_runs}} runs)
+- **Variance:** {{calibration_cv}}% CV — {{calibration_verdict}}
+
+Use the calibrated baseline as your reference point, not a single test run.
+{{calibration_warning}}
+{{/if}}
 
 {{scientist_block}}
 

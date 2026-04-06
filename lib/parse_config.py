@@ -641,7 +641,74 @@ def parse_config(path):
         config["extraction_block"] = ""
         config["has_extractor"] = False
 
+    # Inject calibration data if calibration.md exists
+    cal_path = Path("calibration.md")
+    if cal_path.exists():
+        cal_text = cal_path.read_text()
+        config["has_calibration"] = True
+        # Parse key values from calibration report
+        config["calibration_baseline"] = _extract_cal_field(cal_text, "Baseline")
+        config["calibration_cv"] = _extract_cal_field(cal_text, "CV")
+        config["calibration_verdict"] = _extract_cal_verdict(cal_text)
+        config["calibration_runs"] = _extract_cal_runs(cal_text)
+        cv_val = _extract_cal_cv_number(cal_text)
+        if "noisy" in cal_text.lower() and cv_val:
+            threshold = round(cv_val * 2, 1)
+            config["calibration_warning"] = (
+                f"Variance is high. Run experiments multiple times before concluding "
+                f"an improvement is real. Treat improvements under {threshold}% with skepticism."
+            )
+        else:
+            config["calibration_warning"] = ""
+    else:
+        config["has_calibration"] = False
+
     return config
+
+
+def _extract_cal_field(text, field):
+    """Extract a field value from calibration.md markdown."""
+    for line in text.split("\n"):
+        if f"**{field}:**" in line:
+            # Strip markdown bold and leading dash
+            val = line.split(f"**{field}:**", 1)[1].strip()
+            return val
+    return "unknown"
+
+
+def _extract_cal_verdict(text):
+    """Extract the stability verdict (stable/acceptable/noisy)."""
+    for line in text.split("\n"):
+        if "**CV:**" in line:
+            for word in ("stable", "acceptable", "noisy"):
+                if word in line:
+                    return word
+    return "unknown"
+
+
+def _extract_cal_runs(text):
+    """Extract the number of calibration runs."""
+    import re as _re
+    for line in text.split("\n"):
+        if "**Baseline:**" in line:
+            m = _re.search(r"median of (\d+)", line)
+            if m:
+                return m.group(1)
+    return "3"
+
+
+def _extract_cal_cv_number(text):
+    """Extract the CV percentage as a float."""
+    import re as _re
+    for line in text.split("\n"):
+        if "**CV:**" in line:
+            m = _re.search(r"([\d.]+)%", line)
+            if m:
+                try:
+                    return float(m.group(1))
+                except ValueError:
+                    pass
+    return None
 
 
 if __name__ == "__main__":
