@@ -130,7 +130,6 @@ echo "Generating session files..."
 # Render templates
 python3 "$SCRIPT_DIR/lib/render.py" "$SCRIPT_DIR/templates/program.md.tmpl" "$TMPCONFIG" > program.md
 python3 "$SCRIPT_DIR/lib/render.py" "$SCRIPT_DIR/templates/benchmark.sh.tmpl" "$TMPCONFIG" > benchmark.sh
-python3 "$SCRIPT_DIR/lib/render.py" "$SCRIPT_DIR/templates/session.md.tmpl" "$TMPCONFIG" > autoresearch.md
 
 chmod +x benchmark.sh
 
@@ -139,6 +138,15 @@ printf "commit\t%s\tstatus\ttype\tdescription\n" "$METRIC_NAME" > results.tsv
 
 # Create empty ideas backlog
 touch autoresearch.ideas.md
+
+# Add .autoresearch/ to .gitignore (working state, not committed)
+if [[ -f .gitignore ]]; then
+    if ! grep -q "^\.autoresearch/" .gitignore 2>/dev/null; then
+        echo ".autoresearch/" >> .gitignore
+    fi
+else
+    echo ".autoresearch/" > .gitignore
+fi
 
 echo "Creating branch: $BRANCH"
 
@@ -150,9 +158,27 @@ else
     git checkout -b "$BRANCH"
 fi
 
-# Stage and commit generated files
-git add program.md benchmark.sh autoresearch.md results.tsv autoresearch.ideas.md
+# Phase 1: commit session files
+git add program.md benchmark.sh results.tsv autoresearch.ideas.md .gitignore
 git commit -m "autoresearch: initialize ${NAME} session"
+
+# Phase 2: initialize graph.json with the commit hash from phase 1
+ROOT_COMMIT=$(git rev-parse --short=7 HEAD)
+
+mkdir -p .autoresearch/experiments
+
+python3 -c "
+import sys; sys.path.insert(0, '$SCRIPT_DIR/lib')
+from graph import init_graph, save
+from scratchpad import write_scratchpad
+
+metric = {'name': '$METRIC_NAME', 'direction': '$METRIC_DIR', 'unit': '$METRIC_UNIT'}
+graph = init_graph('$NAME', metric, '$ROOT_COMMIT', '$BRANCH')
+save(graph)
+write_scratchpad(graph)
+"
+
+echo "Initialized experiment tree (root: $ROOT_COMMIT, status: pending)"
 
 # Styled banner
 python3 -c "
@@ -162,9 +188,10 @@ print(banner('$NAME', '$METRIC_NAME', '$METRIC_DIR', '$METRIC_UNIT'))
 print(f'  {DIM}Branch{RESET}    $BRANCH')
 print(f'  {DIM}Rigor{RESET}     $RIGOR')
 print(f'  {DIM}Files{RESET}     program.md, benchmark.sh, autoresearch.md, results.tsv')
+print(f'  {DIM}Tree{RESET}      .autoresearch/graph.json (root: $ROOT_COMMIT)')
 print()
 print(f'  {DIM}Next steps:{RESET}')
-print(f'    {BOLD_WHITE}autoresearch test{RESET}    verify your benchmark works')
+print(f'    {BOLD_WHITE}autoresearch test{RESET}    verify your benchmark and record baseline')
 print(f'    {BOLD_WHITE}autoresearch start{RESET}   launch an agent to optimize')
 print()
 " 2>/dev/null || {
@@ -172,6 +199,7 @@ print()
     echo ""
     echo "Session initialized: $NAME"
     echo "Branch: $BRANCH"
+    echo "Tree root: $ROOT_COMMIT"
     echo ""
     echo "Next: autoresearch test, then autoresearch start"
 }

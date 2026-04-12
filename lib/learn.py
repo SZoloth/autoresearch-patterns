@@ -31,7 +31,23 @@ def read_results(path):
 
 
 def extract_theory(session_path):
-    """Extract the 'Current theory' section from autoresearch.md."""
+    """Extract the current theory.
+
+    Tries graph.json first (v0.7+), falls back to parsing autoresearch.md (v0.6).
+    """
+    # Try graph.json first
+    graph_path = Path(".autoresearch/graph.json")
+    if graph_path.exists():
+        try:
+            import json
+            graph = json.loads(graph_path.read_text(encoding="utf-8"))
+            theory = graph.get("theory", "").strip()
+            if theory:
+                return theory
+        except Exception:
+            pass
+
+    # Fall back to parsing autoresearch.md
     p = Path(session_path)
     if not p.exists():
         return ""
