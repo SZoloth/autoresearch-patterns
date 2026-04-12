@@ -137,7 +137,7 @@ Before your first new experiment, run a strategic review (see above) to orient y
 1. **Read state** — read `autoresearch.md` for full context: current position, what's been tried, what failed and why.
 2. **Hypothesize** — before touching any code, decide what you expect to happen and why. Check the "What not to try" section — if your idea is similar to a past failure, explain specifically how your approach differs or choose a different idea.
 3. **Modify files** — make a single, focused change to the mutable files. Classify this experiment as one of: `architecture` (structural changes), `parameter` (tuning values/config), `simplification` (removing code/complexity), `algorithmic` (different approach/algorithm), `infrastructure` (build/tooling/config), `other`.
-4. **Commit** — `git add <changed files> && git commit -m "experiment: <short description>"`
+4. **Commit** — `git add <changed files> && git commit -m "perf: <short description>"`
 5. **Run** — `./benchmark.sh > run.log 2>&1`
 6. **Read results** — `grep "^METRIC" run.log`
 7. **Record:**

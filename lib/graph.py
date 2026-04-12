@@ -314,7 +314,8 @@ def indented_tree(graph):
         ccc3333  48s  discard  8 worker threads
           ddd4444  31s  keep  connection pool  * best
     """
-    unit = graph["metric"].get("unit", "")
+    unit_raw = graph["metric"].get("unit", "")
+    unit = f" {unit_raw}" if unit_raw else ""
     head = graph.get("head")
     best = graph.get("best")
     lines = []

@@ -21,8 +21,9 @@ def main():
 
     print()
     print(f"  {BOLD_WHITE}{graph['session']}{RESET}")
+    unit_display = f" {unit}" if unit else ""
     if stats["best_metric"] is not None:
-        print(f"  {DIM}Best:{RESET} {BOLD_GREEN}{stats['best_metric']}{unit}{RESET}  "
+        print(f"  {DIM}Best:{RESET} {BOLD_GREEN}{stats['best_metric']}{unit_display}{RESET}  "
               f"{DIM}Experiments:{RESET} {stats['total']}  "
               f"{DIM}Keeps:{RESET} {stats['keeps']}  "
               f"{DIM}Discards:{RESET} {stats['discards']}")

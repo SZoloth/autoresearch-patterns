@@ -23,7 +23,8 @@ def generate_scratchpad(graph, config):
     stats = get_stats(graph)
     head_node = get_head(graph)
     best_node = get_best(graph)
-    unit = metric.get("unit", "")
+    unit_raw = metric.get("unit", "")
+    unit = f" {unit_raw}" if unit_raw else ""
     direction = metric.get("direction", "lower")
 
     lines = []
@@ -31,7 +32,7 @@ def generate_scratchpad(graph, config):
     # ── Header ────────────────────────────────────────────────────
     lines.append(f"# Autoresearch: {graph['session']}")
     lines.append("")
-    lines.append(f"Optimize **{metric['name']}** ({unit}, {direction} is better).")
+    lines.append(f"Optimize **{metric['name']}** ({unit_raw}, {direction} is better).")
     lines.append("")
 
     # ── Current position ──────────────────────────────────────────

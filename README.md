@@ -319,6 +319,13 @@ autoresearch status                         Show session summary and results
 autoresearch learn                          Extract session lessons to ~/.autoresearch/skills.md
 autoresearch examples                       List available example configs
 autoresearch examples copy <name>           Copy an example to ./lab.yaml
+autoresearch record <status> <value> ...  Record experiment (keep/discard/crash)
+autoresearch fork <commit>                Fork from a previous experiment
+autoresearch tree                         Show experiment tree
+autoresearch show <commit>                Show experiment details
+autoresearch recover                      Reconcile graph with git history
+autoresearch migrate                      Migrate v0.6 session to tree format
+autoresearch scratchpad                   Regenerate autoresearch.md from graph
 autoresearch help                           Show help
 ```
 
@@ -359,6 +366,16 @@ checkpoint_interval: 0    # disable checkpoints entirely
 ```
 
 ## Changelog
+
+### 0.7.0
+
+- **Tree-structured exploration** — experiments form a tree, not a line. Failed experiments are preserved as scored, annotated nodes instead of being erased by `git reset`. Agents use `autoresearch record` to log results and `autoresearch fork` to branch from any committed node.
+- **Auto-generated scratchpad** — `autoresearch.md` is now auto-generated from the experiment tree, replacing the manually-maintained session doc. Includes: current position, theory, path to head, "What not to try" (deduplicated failures), frontier nodes, best experiments, statistics, ideas backlog.
+- **Per-experiment storage** — each experiment gets a directory under `.autoresearch/experiments/` with result.json and (for keeps) diff.patch and trace.log.
+- **Fork from any node** — `autoresearch fork <commit>` creates a new branch from any committed experiment, enabling exploration of multiple approaches without losing prior work.
+- **Session recovery** — `autoresearch recover` reconciles graph.json with git history, detecting orphaned nodes and missing commits.
+- **v0.6 migration** — `autoresearch migrate` builds a tree from existing results.tsv + git log, then regenerates program.md with v0.7 instructions.
+- **Inspired by** [evo-hq/evo](https://github.com/evo-hq/evo)'s tree search architecture, adapted for agent-agnostic file protocol.
 
 ### 0.6.0
 
