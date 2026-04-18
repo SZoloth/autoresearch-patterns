@@ -51,6 +51,44 @@ def extract_best_and_baseline(results, metric_name, direction):
     return best, baseline
 
 
+def show_tree_status(config):
+    """Tree-aware status display when graph.json exists."""
+    from graph import load, get_stats, indented_tree, get_head, get_best
+
+    graph = load()
+    if graph is None:
+        return False
+
+    stats = get_stats(graph)
+    if stats["total"] == 0 and stats["baselines"] == 0:
+        return False
+
+    metric = graph["metric"]
+    unit = metric.get("unit", "")
+    head = get_head(graph)
+    best = get_best(graph)
+
+    print(header(config["name"], config.get("description", "")))
+
+    if stats["best_metric"] is not None:
+        best_str = format_value(stats["best_metric"], unit)
+        print(f"  {DIM}Experiments{RESET}  {BOLD_WHITE}{stats['total']}{RESET}")
+        print(f"  {DIM}Best{RESET}         {BOLD_GREEN}{best_str}{RESET}")
+        if stats["improvement"] is not None:
+            color = GREEN if stats["improvement"] > 0 else RED
+            print(f"  {DIM}Improvement{RESET}  {color}{stats['improvement']:+.1f}%{RESET}")
+        print(f"  {DIM}Keep rate{RESET}    {BOLD_WHITE}{stats['keep_rate']:.0f}%{RESET} ({stats['keeps']}/{stats['total'] - stats['baselines']})")
+    print()
+
+    # Show tree
+    print(f"  {DIM}Tree:{RESET}")
+    for line in indented_tree(graph).splitlines():
+        print(f"  {line}")
+    print()
+
+    return True
+
+
 def main():
     config_path = sys.argv[1] if len(sys.argv) > 1 else "lab.yaml"
 
@@ -64,6 +102,12 @@ def main():
     direction = metric["direction"]
     unit = metric.get("unit", "")
 
+    # Try tree-aware display first
+    if Path(".autoresearch/graph.json").exists():
+        if show_tree_status(config):
+            return
+
+    # Fall back to results.tsv display
     results = read_results("results.tsv")
 
     print(header(config["name"], config.get("description", "")))

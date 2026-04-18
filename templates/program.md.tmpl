@@ -6,7 +6,7 @@
 
 ## Objective
 
-Optimize **{{metric.name}}** ({{metric.unit}}, {{metric.direction}} is better) by iteratively modifying the files in scope. Each experiment is a single change, measured by `./benchmark.sh`, kept or discarded based on the metric.
+Optimize **{{metric.name}}** ({{metric.unit}}, {{metric.direction}} is better) by iteratively modifying the files in scope. Each experiment is a single change, measured by `./benchmark.sh`, kept or discarded based on the metric. Your experiments form a tree — every result is preserved, including failures.
 
 ## How to run an experiment
 
@@ -35,11 +35,13 @@ If grep returns nothing, the run crashed. Read the last 50 lines of `run.log` fo
 {{/if}}
 - `benchmark.sh` — the eval harness is fixed
 - `program.md` — these instructions are fixed
-- `results.tsv` — append only, never rewrite
 - `last_run.log` — written by benchmark.sh each run
 {{#if has_calibration}}
 - `calibration.md` — calibration report is fixed
 {{/if}}
+
+**NEVER run `git reset`. Use `autoresearch record discard` instead.**
+Resetting destroys experiment history. Recording preserves failures as valuable data.
 
 ## Constraints
 {{#each constraints}}
@@ -52,10 +54,11 @@ If grep returns nothing, the run crashed. Read the last 50 lines of `run.log` fo
 |------|---------|
 | `program.md` | These instructions (read-only) |
 | `benchmark.sh` | Eval harness (read-only) |
-| `autoresearch.md` | Living session document — update as you go |
-| `results.tsv` | Tab-separated experiment log — append each result |
-| `autoresearch.ideas.md` | Ideas backlog — save promising deferred ideas |
+| `autoresearch.md` | Auto-generated scratchpad — full experiment state (read each loop iteration) |
+| `results.tsv` | Tab-separated experiment log (auto-updated by `autoresearch record`) |
+| `autoresearch.ideas.md` | Ideas backlog — save promising deferred ideas here |
 | `last_run.log` | Full output from the last benchmark run — read during analysis |
+| `.autoresearch/graph.json` | Experiment tree (managed by CLI — do not edit directly) |
 {{#if has_calibration}}
 | `calibration.md` | Calibration report — baseline variance and confidence (read-only) |
 {{/if}}
@@ -83,32 +86,11 @@ After every 3rd strategic checkpoint, run this additional review:
 
 1. **Audit instruction effectiveness** — which rules from this program correlated with successful experiments? Which did you never reference or that led you astray?
 2. **Identify dead weight** — any instruction you haven't applied in the last 15 experiments is a candidate for removal.
-3. **Propose improvements** — write a `## Meta-optimization review` section in `autoresearch.md`:
+3. **Propose improvements** — write a `## Meta-optimization review` section in `autoresearch.ideas.md`:
    - Rules that helped (with evidence from experiment results)
    - Rules that are dead weight (with reasoning)
    - Proposed additions based on patterns discovered during experiments
-4. **Do NOT modify program.md** — it is read-only. Record proposals in `autoresearch.md` for the human to review.
-
-### Branch strategy protocol
-
-When a checkpoint selects **Branch**:
-
-1. Note the current commit hash as your branch point.
-2. Pick 2-3 competing approaches from your ideas backlog.
-3. For each approach, create a sub-branch:
-   ```bash
-   git checkout -b autoresearch/branch-<approach> <branch-point-hash>
-   ```
-4. Run 3-5 experiments on each sub-branch following the normal loop.
-5. Compare the best metric from each sub-branch.
-6. Merge the winner back to the main session branch:
-   ```bash
-   git checkout <original-branch>
-   git merge autoresearch/branch-<winner>
-   ```
-7. Delete losing sub-branches: `git branch -D autoresearch/branch-<loser>`
-8. Log the comparison and decision in `autoresearch.md`.
-9. Resume the normal experiment loop from the merged state.
+4. **Do NOT modify program.md** — it is read-only. Record proposals in `autoresearch.ideas.md` for the human to review.
 {{/if}}
 
 {{#if has_skills}}
@@ -119,50 +101,80 @@ These patterns were extracted from past autoresearch sessions. Use them as start
 {{skills_block}}
 {{/if}}
 
+## Tree exploration
+
+Your experiments form a tree, not a line. Every experiment is preserved — even failures are valuable data that prevents you from repeating dead ends.
+
+### Reading state
+
+`autoresearch.md` is auto-generated and always up-to-date. It shows:
+- **Current position** — where you are in the tree, current metric
+- **Current theory** — your running model of what affects the metric
+- **What not to try** — failed experiments (don't repeat these)
+- **Frontier** — leaf nodes you can fork from to try different approaches
+- **Best experiments** — top results so far
+- **Statistics** — keep rate, per-type breakdown
+
+### Forking
+
+When you want to try a different approach from an earlier state:
+
+```bash
+autoresearch fork <commit-hash>
+```
+
+This creates a new branch from that commit. Fork from:
+- The parent of a failed experiment (try a different approach)
+- Any node in the "Frontier" section of `autoresearch.md`
+- The global best (build on what works)
+
+### Theory updates
+
+Track your evolving understanding of the system:
+
+```bash
+autoresearch record keep <value> --theory "connection pooling is the bottleneck, not thread count"
+```
+
+The theory persists across scratchpad regenerations and is visible at the top of `autoresearch.md`.
+
 ## The experiment loop
 
 **LOOP FOREVER. Never ask "should I continue?" — the user expects autonomous work.**
 
 ### Resuming a session
 
-If `autoresearch.md` exists and `results.tsv` has data rows, you are resuming. Read both files plus `git log --oneline` to understand what has been tried. Continue from where the previous session left off. If `autoresearch.ideas.md` exists, use it as inspiration.
+Read `autoresearch.md` — it contains the full experiment state including what's been tried, what failed and why, and what the current theory is. Continue from where the previous session left off. If `autoresearch.ideas.md` has ideas, use them as inspiration.
 {{#if has_checkpoint}}
 
-Before your first new experiment, run a strategic review (see above) to orient yourself. Write a "Session resume analysis" section in `autoresearch.md` with your findings.
+Before your first new experiment, run a strategic review (see above) to orient yourself.
 {{/if}}
 
 ### Loop steps
 
-1. **Read state** — check `autoresearch.md`, `results.tsv`, and `git log --oneline` for context.
-2. **Hypothesize** — before touching any code, write down what you expect to happen and why.
+1. **Read state** — read `autoresearch.md` for full context: current position, what's been tried, what failed and why.
+2. **Hypothesize** — before touching any code, decide what you expect to happen and why. Check the "What not to try" section — if your idea is similar to a past failure, explain specifically how your approach differs or choose a different idea.
 3. **Modify files** — make a single, focused change to the mutable files. Classify this experiment as one of: `architecture` (structural changes), `parameter` (tuning values/config), `simplification` (removing code/complexity), `algorithmic` (different approach/algorithm), `infrastructure` (build/tooling/config), `other`.
-4. **Commit** — `git add <changed files> && git commit -m "experiment: <short description>"`
+4. **Commit** — `git add <changed files> && git commit -m "perf: <short description>"`
 5. **Run** — `./benchmark.sh > run.log 2>&1`
 6. **Read results** — `grep "^METRIC" run.log`
-7. **Decide:**
-   - **Improved** ({{metric.direction}} {{metric.name}}) → **keep**. Log to `results.tsv` with status `keep`.
-   - **Equal or worse** → **discard**. Log to `results.tsv` with status `discard`. Then `git reset HEAD~1 --hard` to remove the failed commit.
-   - **Crashed** → log with status `crash` and metric value `0`. If the bug is trivial (typo, missing import), fix and retry. Otherwise, `git reset HEAD~1 --hard` and move on.
-8. **Analyze** — read `last_run.log` for the full eval output (warnings, timing breakdowns, error patterns). Explain the root cause: what causal mechanism produced this result? Update `autoresearch.md` with the mechanism and what it reveals about the system.
-9. **Update backlog** — re-prioritize `autoresearch.ideas.md` based on new insights.
-10. **Repeat** — go to step 2. Never stop.
+7. **Record:**
+   - **Improved** ({{metric.direction}} {{metric.name}}) →
+     `autoresearch record keep <value> --type <type> --description "<what you changed>"`
+   - **Equal or worse** →
+     `autoresearch record discard <value> --type <type> --description "<what you changed>"`
+   - **Crashed** →
+     `autoresearch record crash 0 --type <type> --description "<what you changed>"`
+8. **Analyze** — read `last_run.log` for the full eval output (warnings, timing breakdowns, error patterns). Explain the root cause: what causal mechanism produced this result?
+9. **Re-read `autoresearch.md`** — it refreshes automatically after each `record`. Check updated state.
+10. **Decide next move:**
+    - Continue on current branch (next experiment builds on this state)
+    - Fork from a better node: `autoresearch fork <commit>` (see Frontier in scratchpad)
+11. **Update backlog** — re-prioritize `autoresearch.ideas.md` based on new insights.
+12. **Repeat** — go to step 2. Never stop.
 {{#if has_checkpoint}}
-11. **Strategic checkpoint** — every {{checkpoint_interval}} experiments, run a strategic review (see above) before your next hypothesis.
+13. **Strategic checkpoint** — every {{checkpoint_interval}} experiments (count from your last review), run a strategic review (see above) before your next hypothesis. When a checkpoint selects **Branch**, use `autoresearch fork` to create branches from the best node, run experiments on each, then continue from whichever fork produced the best result.
 {{/if}}
-
-### Results format
-
-`results.tsv` is tab-separated with these columns:
-
-```
-commit	{{metric.name}}	status	type	description
-```
-
-- `commit`: short git hash (7 chars)
-- `{{metric.name}}`: the metric value (use `0` for crashes)
-- `status`: `keep`, `discard`, or `crash`
-- `type`: experiment category — one of: `architecture`, `parameter`, `simplification`, `algorithmic`, `infrastructure`, `other`
-- `description`: short text describing the experiment
 
 ### Simplicity criterion
 
@@ -173,14 +185,16 @@ All else being equal, simpler is better:
 
 ### When stuck
 
-Don't thrash on the same approach. If you've reverted the same idea twice, try something structurally different. Re-read the source files. Think about what the system is actually doing. The best improvements come from deep understanding, not random search.
+Don't thrash on the same approach. If you've discarded the same idea twice, try something structurally different. Check `autoresearch.md` — the "What not to try" section shows what's already failed. Re-read the source files. Think about what the system is actually doing. The best improvements come from deep understanding, not random search.
+
+Consider forking from an earlier node: `autoresearch fork <commit>` takes you back to a prior state where you can try a completely different direction.
 
 ### Crashes and errors
 
 - Trivial bugs (typo, wrong variable name, missing import): fix and retry
-- Fundamental failures (approach doesn't work): log as crash, revert, move on
+- Fundamental failures (approach doesn't work): `autoresearch record crash 0 --description "..."`, move on
 - Don't invest more than 2-3 attempts fixing a single crash
 
 ## NEVER STOP
 
-The user may be asleep. The user may be away for hours. Keep running experiments until manually interrupted. If you run out of ideas, think harder — re-read the code, study the metric, try combining previous near-misses, try more radical changes. The loop runs until the human stops you.
+The user may be asleep. The user may be away for hours. Keep running experiments until manually interrupted. If you run out of ideas, think harder — re-read the code, study the metric, try combining previous near-misses, try more radical changes, fork from an earlier state and explore a different direction. The loop runs until the human stops you.

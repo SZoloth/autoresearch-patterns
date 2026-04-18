@@ -11,13 +11,19 @@ usage() {
     echo ""
     echo "Commands:"
     echo "  init [--dry-run] [lab.yaml]   Initialize an autoresearch session"
-    echo "  test                          Run benchmark.sh once and show result"
+    echo "  test                          Run benchmark once and record baseline"
     echo "  calibrate [--runs N]          Validate benchmark stability before optimization"
     echo "  start [--agent <name>]        Launch an agent to optimize"
     echo "  status                        Show session summary and results"
-    echo "  learn                         Extract lessons from session to ~/.autoresearch/skills.md"
-    echo "  examples                      List available example configs"
-    echo "  examples copy <name>          Copy an example to ./lab.yaml"
+    echo "  record <status> <value> ...   Record experiment result (keep/discard/crash)"
+    echo "  fork <commit>                 Fork from a previous experiment"
+    echo "  tree                          Show experiment tree"
+    echo "  scratchpad                    Regenerate autoresearch.md from graph"
+    echo "  show <commit>                 Show experiment details"
+    echo "  recover                       Reconcile graph with git history"
+    echo "  migrate                       Migrate v0.6 session to v0.7 tree format"
+    echo "  learn                         Extract lessons to ~/.autoresearch/skills.md"
+    echo "  examples [copy <name>]        List or copy example configs"
     echo "  help                          Show this help"
     echo ""
     echo "Typical flow: init → test → calibrate → start"
@@ -96,6 +102,27 @@ if best is None:
 else:
     print(f'  Run {BOLD_WHITE}autoresearch status{RESET} for full results.')
 print()
+
+# Record baseline in graph.json if it exists
+from pathlib import Path
+if Path('.autoresearch/graph.json').exists():
+    from graph import load, save, update_node_metric, update_best
+    from experiment import save_experiment
+    from scratchpad import write_scratchpad
+    g = load()
+    if g:
+        root = g.get('root')
+        root_node = g['nodes'].get(root, {})
+        try:
+            val = float(metric_val)
+        except (ValueError, TypeError):
+            val = None
+        if val is not None and root_node.get('status') in ('pending', 'baseline'):
+            update_node_metric(g, root, val, 'baseline')
+            update_best(g)
+            save_experiment(root, val, 'baseline', 'baseline', 'baseline measurement')
+            save(g)
+            write_scratchpad(g)
 " 2>/dev/null || {
             # Fallback if python fails
             echo "  Result: ${METRIC_KEY} = ${METRIC_VAL}"
@@ -189,6 +216,30 @@ print()
             exit 1
         fi
         exec python3 "$AUTORESEARCH_HOME/lib/learn.py" "${2:-lab.yaml}"
+        ;;
+    record)
+        shift
+        exec python3 "$AUTORESEARCH_HOME/lib/record.py" "$@"
+        ;;
+    fork)
+        shift
+        exec python3 "$AUTORESEARCH_HOME/lib/fork_node.py" "$@"
+        ;;
+    tree)
+        exec python3 "$AUTORESEARCH_HOME/lib/tree_view.py"
+        ;;
+    scratchpad)
+        exec python3 "$AUTORESEARCH_HOME/lib/scratchpad.py"
+        ;;
+    show)
+        shift
+        exec python3 "$AUTORESEARCH_HOME/lib/show_experiment.py" "$@"
+        ;;
+    recover)
+        exec python3 "$AUTORESEARCH_HOME/lib/recover.py"
+        ;;
+    migrate)
+        exec python3 "$AUTORESEARCH_HOME/lib/migrate.py"
         ;;
     examples)
         shift || true
